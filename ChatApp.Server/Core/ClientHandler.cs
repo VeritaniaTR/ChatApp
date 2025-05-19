@@ -6,8 +6,8 @@ using System.Threading.Tasks;
 using ChatApp.Server.Networking;
 using ChatApp.Common.Utilities;
 using System.Security.Cryptography;
-using ChatApp.Common.Models; // Додано для ChatMessage
-using Newtonsoft.Json; // Додано для JsonSerializationException
+using ChatApp.Common.Models;
+using Newtonsoft.Json;
 
 namespace ChatApp.Server.Core
 {
@@ -16,7 +16,7 @@ namespace ChatApp.Server.Core
         private readonly TcpServer _server;
         private TcpClient _client;
         private string _clientId;
-        private string _nickname = "UnknownUser"; // Нікнейм за замовчуванням
+        private string _nickname = "UnknownUser";
         private readonly ChatDatabase _chatDatabase;
 
         public ClientHandler(TcpClient client, TcpServer server, ChatDatabase chatDatabase)
@@ -35,53 +35,51 @@ namespace ChatApp.Server.Core
             NetworkStream stream = _client.GetStream();
             byte[] buffer = new byte[4096];
             StringBuilder receivedDataBuilder = new StringBuilder();
-
-            int bytesRead; // Оголошено тут
+            int bytesRead;
 
             try
             {
-                // === ЗМІНА: Більш надійна обробка першого повідомлення (нікнейму) ===
                 string encryptedFirstMessage = null;
-                // Читаємо дані, поки не отримаємо повний зашифрований нікнейм, завершений '\n'
-                // Або поки клієнт не відключиться
                 while (_client.Connected && encryptedFirstMessage == null)
                 {
                     bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
-                    if (bytesRead == 0) // З'єднання закрито клієнтом до надсилання першого повідомлення
+                    if (bytesRead == 0)
                     {
-                        Console.WriteLine($"Сервер: Клієнт {_client.Client.RemoteEndPoint} відключився до надсилання першого повідомлення.");
-                        return; // Вихід, щоб потрапити в finally
+                        Console.WriteLine($"Сервер: Клієнт {_client.Client.RemoteEndPoint} ({_nickname}) відключився до надсилання першого повідомлення.");
+                        return;
                     }
                     receivedDataBuilder.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
-
                     int newlineIndex = receivedDataBuilder.ToString().IndexOf('\n');
                     if (newlineIndex != -1)
                     {
                         encryptedFirstMessage = receivedDataBuilder.ToString().Substring(0, newlineIndex);
-                        receivedDataBuilder.Remove(0, newlineIndex + 1); // Видаляємо нікнейм з буфера
+                        receivedDataBuilder.Remove(0, newlineIndex + 1);
                     }
-                    // Якщо newlineIndex == -1, продовжуємо читати, поки не знайдемо \n
                 }
 
                 ChatMessage initialMessage = null;
                 if (encryptedFirstMessage != null)
                 {
+                    // === ЗМІНА: Додано логування ===
+                    Console.WriteLine($"СЕРВЕР: Перше повідомлення (зашифроване) від {_client.Client.RemoteEndPoint}: '{encryptedFirstMessage}'");
+                    // ===============================
                     try
                     {
                         string decryptedJson = EncryptionHelper.Decrypt(encryptedFirstMessage);
-                        initialMessage = ChatMessage.FromJson(decryptedJson);
+                        // === ЗМІНА: Додано логування ===
+                        Console.WriteLine($"СЕРВЕР: Перше повідомлення (розшифроване JSON) від {_client.Client.RemoteEndPoint}: '{decryptedJson}'");
+                        // ===============================
+                        initialMessage = ChatMessage.FromJson(decryptedJson); // Тут виникала помилка
 
                         if (initialMessage == null || initialMessage.Type != MessageType.SystemMessage || string.IsNullOrWhiteSpace(initialMessage.Sender))
                         {
-                            Console.WriteLine($"Сервер: Клієнт {_client.Client.RemoteEndPoint} надіслав недійсне перше повідомлення або відсутній нікнейм. Відключення.");
+                            Console.WriteLine($"Сервер: Клієнт {_client.Client.RemoteEndPoint} ({_nickname}) надіслав недійсне перше повідомлення або відсутній нікнейм. Вміст: '{decryptedJson}'. Відключення.");
                             return;
                         }
 
-                        // Перевірка на унікальність нікнейму
                         if (_server.IsNicknameTaken(initialMessage.Sender))
                         {
                             Console.WriteLine($"Сервер: Нікнейм '{initialMessage.Sender}' вже зайнятий. Відключення клієнта {_client.Client.RemoteEndPoint}.");
-                            // Надсилаємо клієнту повідомлення про помилку
                             var errorMessage = new ChatMessage
                             {
                                 Type = MessageType.SystemMessage,
@@ -91,70 +89,75 @@ namespace ChatApp.Server.Core
                             string encryptedError = EncryptionHelper.Encrypt(errorMessage.ToJson());
                             byte[] errorData = Encoding.UTF8.GetBytes(encryptedError + "\n");
                             await stream.WriteAsync(errorData, 0, errorData.Length);
-                            await Task.Delay(50); // Даємо час на відправку
-                            return; // Вихід
+                            await Task.Delay(50);
+                            return;
                         }
 
-                        _nickname = initialMessage.Sender; // Встановлюємо нікнейм, якщо він унікальний
-
+                        _nickname = initialMessage.Sender;
                         Console.WriteLine($"Сервер: Клієнт {_client.Client.RemoteEndPoint} встановив нікнейм: {_nickname}");
-                        await _server.BroadcastMessageAsync(new ChatMessage { Type = MessageType.SystemMessage, Content = $"[{_nickname}] приєднався до чату." }, this);
 
-                        // Завантажуємо та надсилаємо історію чату новому клієнту
+                        await _server.BroadcastMessageAsync(new ChatMessage { Type = MessageType.SystemMessage, Sender = "Server", Content = $"[{_nickname}] приєднався до чату." }, this);
+                        await _server.SendUserListAsync();
+
+                        // ... (код надсилання історії - без змін) ...
                         List<string> chatHistory = _chatDatabase.GetMessageHistory(50);
-                        foreach (var historyMessageContent in chatHistory)
+                        if (chatHistory.Any())
                         {
-                            var historyChatMessage = new ChatMessage
+                            Console.WriteLine($"Сервер: Надсилання історії ({chatHistory.Count} повідомлень) клієнту {_nickname}.");
+                            foreach (var historyMessageContent in chatHistory)
                             {
-                                Type = MessageType.ChatMessage,
-                                Sender = "Server", // Для історичних повідомлень, відправником може бути "Server" або оригінальний відправник
-                                Content = historyMessageContent // Зміст повідомлення вже містить нікнейм та час
-                            };
-                            string encryptedHistoryMessage = EncryptionHelper.Encrypt(historyChatMessage.ToJson());
-                            byte[] historyData = Encoding.UTF8.GetBytes(encryptedHistoryMessage + "\n");
-                            try
-                            {
-                                await stream.WriteAsync(historyData, 0, historyData.Length);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"Сервер: Помилка надсилання історії клієнту {_nickname}: {ex.Message}");
-                                break;
+                                var serverFormattedHistoryMessage = new ChatMessage
+                                {
+                                    Type = MessageType.SystemMessage,
+                                    Sender = "Server_History",
+                                    Content = historyMessageContent
+                                };
+
+                                string encryptedHistoryMessage = EncryptionHelper.Encrypt(serverFormattedHistoryMessage.ToJson());
+                                byte[] historyData = Encoding.UTF8.GetBytes(encryptedHistoryMessage + "\n");
+                                try
+                                {
+                                    await stream.WriteAsync(historyData, 0, historyData.Length);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"Сервер: Помилка надсилання історії клієнту {_nickname}: {ex.Message}");
+                                    break;
+                                }
                             }
                         }
                     }
                     catch (JsonSerializationException ex)
                     {
-                        Console.WriteLine($"Сервер: Помилка десеріалізації JSON першого повідомлення від {_client.Client.RemoteEndPoint}: {ex.Message}. Відключення.");
+                        Console.WriteLine($"Сервер: Помилка десеріалізації JSON першого повідомлення від {_client.Client.RemoteEndPoint} ({_nickname}): {ex.Message}. Зашифроване: '{encryptedFirstMessage}'. Розшифроване (спроба): '{TryDecrypt(encryptedFirstMessage)}'. Відключення.");
                         return;
                     }
                     catch (FormatException ex)
                     {
-                        Console.WriteLine($"Сервер: Помилка формату Base64 першого повідомлення від {_client.Client.RemoteEndPoint}. Відключення. {ex.Message}");
+                        Console.WriteLine($"Сервер: Помилка формату (Base64) першого повідомлення від {_client.Client.RemoteEndPoint} ({_nickname}): {ex.Message}. Зашифроване: '{encryptedFirstMessage}'. Відключення.");
                         return;
                     }
                     catch (CryptographicException ex)
                     {
-                        Console.WriteLine($"Сервер: Помилка шифрування першого повідомлення від {_client.Client.RemoteEndPoint}. Відключення. {ex.Message}");
+                        Console.WriteLine($"Сервер: Помилка дешифрування першого повідомлення від {_client.Client.RemoteEndPoint} ({_nickname}): {ex.Message}. Зашифроване: '{encryptedFirstMessage}'. Відключення.");
                         return;
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Сервер: Неочікувана помилка при отриманні першого повідомлення від {_client.Client.RemoteEndPoint}: {ex.Message}. Відключення.");
+                        Console.WriteLine($"Сервер: Неочікувана помилка при отриманні першого повідомлення від {_client.Client.RemoteEndPoint} ({_nickname}): {ex.Message}. Зашифроване: '{encryptedFirstMessage}'. Відключення.");
                         return;
                     }
                 }
                 else
                 {
-                    Console.WriteLine($"Сервер: Клієнт {_client.Client.RemoteEndPoint} не надіслав перше повідомлення до закриття з'єднання. Відключення.");
+                    Console.WriteLine($"Сервер: Клієнт {_client.Client.RemoteEndPoint} ({_nickname}) не надіслав перше повідомлення (encryptedFirstMessage is null). Відключення.");
                     return;
                 }
 
-                // Основний цикл читання повідомлень
+                // ... (Основний цикл читання повідомлень - без змін відносно попередньої версії) ...
                 while (_client.Connected && (bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                 {
                     receivedDataBuilder.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
-
                     string currentBuffer = receivedDataBuilder.ToString();
                     int newlineIndex;
 
@@ -164,53 +167,64 @@ namespace ChatApp.Server.Core
                         receivedDataBuilder.Remove(0, newlineIndex + 1);
                         currentBuffer = receivedDataBuilder.ToString();
 
+                        if (string.IsNullOrWhiteSpace(fullEncryptedMessage)) continue;
+
                         try
                         {
                             string decryptedJson = EncryptionHelper.Decrypt(fullEncryptedMessage).Trim();
-                            ChatMessage receivedObject = ChatMessage.FromJson(decryptedJson);
+                            ChatMessage receivedClientMessage = ChatMessage.FromJson(decryptedJson);
 
-                            if (receivedObject == null)
+                            if (receivedClientMessage == null)
                             {
-                                Console.WriteLine($"Сервер: Отримано недійсний JSON від {_nickname}. Пропускаємо.");
+                                Console.WriteLine($"Сервер: Отримано недійсний JSON від {_nickname} (після десеріалізації null). Пропускаємо.");
                                 continue;
                             }
 
-                            Console.WriteLine($"Сервер: Отримано від {_nickname} (Тип: {receivedObject.Type}): {receivedObject.Content}");
+                            //Console.WriteLine($"Сервер: Отримано від {_nickname} (Тип: {receivedClientMessage.Type}): {receivedClientMessage.Content}");
 
-                            switch (receivedObject.Type)
+                            switch (receivedClientMessage.Type)
                             {
                                 case MessageType.ChatMessage:
-                                    _chatDatabase.SaveMessage(receivedObject.Timestamp, _nickname, receivedObject.Content);
-                                    await _server.BroadcastMessageAsync(new ChatMessage { Type = MessageType.ChatMessage, Sender = _nickname, Content = receivedObject.Content }, this);
+                                    var chatMsgToBroadcast = new ChatMessage
+                                    {
+                                        Type = MessageType.ChatMessage,
+                                        Sender = _nickname,
+                                        Content = receivedClientMessage.Content,
+                                        Timestamp = DateTime.Now
+                                    };
+                                    _chatDatabase.SaveMessage(chatMsgToBroadcast.Timestamp, chatMsgToBroadcast.Sender, chatMsgToBroadcast.Content);
+                                    await _server.BroadcastMessageAsync(chatMsgToBroadcast, this);
                                     break;
                                 case MessageType.Disconnect:
                                     Console.WriteLine($"Сервер: Клієнт {_nickname} ініціював відключення.");
                                     return;
-                                case MessageType.PrivateMessage:
-                                    // Буде реалізовано пізніше
-                                    break;
-                                case MessageType.FileTransfer:
-                                    // Буде реалізовано пізніше
-                                    break;
-                                case MessageType.TypingStatus:
-                                    // Буде реалізовано пізніше
-                                    break;
                                 default:
-                                    Console.WriteLine($"Сервер: Невідомий тип повідомлення від {_nickname}: {receivedObject.Type}");
+                                    // Транслюємо FileTransfer типи без змін, але з правильним Sender
+                                    if (receivedClientMessage.Type == MessageType.FileTransferMetadata ||
+                                        receivedClientMessage.Type == MessageType.FileTransferChunk ||
+                                        receivedClientMessage.Type == MessageType.FileTransferEnd)
+                                    {
+                                        receivedClientMessage.Sender = _nickname; // Встановлюємо відправника
+                                        await _server.BroadcastMessageAsync(receivedClientMessage, this);
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine($"Сервер: Невідомий або необроблений тип повідомлення {receivedClientMessage.Type} від {_nickname}.");
+                                    }
                                     break;
                             }
                         }
                         catch (JsonSerializationException ex)
                         {
-                            Console.WriteLine($"Сервер: Помилка десеріалізації JSON від {_nickname}. Пропускаємо. {ex.Message}");
+                            Console.WriteLine($"Сервер: Помилка десеріалізації JSON від {_nickname}: {ex.Message}. Пропускаємо. Зашифроване: '{fullEncryptedMessage.Substring(0, Math.Min(fullEncryptedMessage.Length, 100))}'... Розшифроване (спроба): '{TryDecrypt(fullEncryptedMessage)}'");
                         }
                         catch (FormatException ex)
                         {
-                            Console.WriteLine($"Сервер: Помилка формату Base64 повідомлення від {_nickname}. Пропускаємо. {ex.Message}");
+                            Console.WriteLine($"Сервер: Помилка формату Base64 повідомлення від {_nickname}: {ex.Message}. Пропускаємо. Зашифроване: '{fullEncryptedMessage.Substring(0, Math.Min(fullEncryptedMessage.Length, 100))}'...");
                         }
                         catch (CryptographicException ex)
                         {
-                            Console.WriteLine($"Сервер: Помилка шифрування повідомлення від {_nickname}. Пропускаємо. {ex.Message}");
+                            Console.WriteLine($"Сервер: Помилка шифрування повідомлення від {_nickname}: {ex.Message}. Пропускаємо. Зашифроване: '{fullEncryptedMessage.Substring(0, Math.Min(fullEncryptedMessage.Length, 100))}'...");
                         }
                         catch (Exception ex)
                         {
@@ -221,23 +235,28 @@ namespace ChatApp.Server.Core
             }
             catch (System.IO.IOException ex)
             {
-                Console.WriteLine($"Сервер: Помилка читання від {_client.Client.RemoteEndPoint} ({_nickname}): {ex.Message}");
+                Console.WriteLine($"Сервер: IOException для клієнта {_client.Client.RemoteEndPoint} ({_nickname}): {ex.Message}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Сервер: Неочікувана помилка обробки клієнта {_client.Client.RemoteEndPoint} ({_nickname}): {ex.Message}");
+                Console.WriteLine($"Сервер: Неочікувана помилка обробки клієнта {_client.Client.RemoteEndPoint} ({_nickname}): {ex.Message}\n{ex.StackTrace}");
             }
             finally
             {
-                // Повідомляємо всіх про те, що клієнт покинув чат
+                // Console.WriteLine($"Сервер: Клієнт {_client.Client.RemoteEndPoint} ({_nickname}) переходить до блоку finally.");
                 if (!string.IsNullOrEmpty(_nickname) && _nickname != "UnknownUser")
                 {
-                    await _server.BroadcastMessageAsync(new ChatMessage { Type = MessageType.SystemMessage, Content = $"[{_nickname}] покинув чат." }, this);
+                    await _server.BroadcastMessageAsync(new ChatMessage { Type = MessageType.SystemMessage, Sender = "Server", Content = $"[{_nickname}] покинув чат." }, this);
                 }
                 _server.RemoveClient(this);
                 _client.Close();
-                Console.WriteLine($"Сервер: Клієнт {_client.Client.RemoteEndPoint} ({_nickname}) відключився.");
+                Console.WriteLine($"Сервер: Клієнт {_client.Client.RemoteEndPoint} ({_nickname}) відключився та ресурси закрито.");
             }
+        }
+        private string TryDecrypt(string encryptedText) // Допоміжний метод для логування
+        {
+            try { return EncryptionHelper.Decrypt(encryptedText); }
+            catch { return "[не вдалося розшифрувати]"; }
         }
     }
 }
