@@ -3,81 +3,172 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:ChatApp.Client.Views"
         xmlns:vm="clr-namespace:ChatApp.Client.ViewModels"
-        Title="WPF Чат Клієнт" Height="450" Width="600">
+        xmlns:models="clr-namespace:ChatApp.Client.Models"
+        xmlns:local="clr-namespace:ChatApp.Client.Views" mc:Ignorable="d"
+        Title="ChatApp Client" Height="600" Width="800"
+        WindowStartupLocation="CenterScreen">
+
     <Window.DataContext>
         <vm:MainWindowViewModel/>
     </Window.DataContext>
+
     <Window.Resources>
-        <local:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary.MergedDictionaries>
+
+            <local:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+            <local:StringToBooleanConverterForNullOrEmpty x:Key="StringToBooleanConverterForNullOrEmpty"/>
+
+            <Style TargetType="Button">
+                <Setter Property="Padding" Value="10,5"/>
+                <Setter Property="Margin" Value="5"/>
+            </Style>
+            <Style TargetType="TextBox">
+                <Setter Property="Padding" Value="5"/>
+                <Setter Property="Margin" Value="5"/>
+            </Style>
+            <Style TargetType="ListBoxItem">
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            </Style>
+            <Style TargetType="ItemsControl">
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            </Style>
+        </ResourceDictionary>
     </Window.Resources>
-    <Grid>
+
+    <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="200"/>
-        </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="5">
-            <TextBlock Text="Нікнейм:" Margin="5"/>
-            <TextBox x:Name="NicknameTextBox" Width="100" Margin="5" Text="{Binding Nickname, UpdateSourceTrigger=PropertyChanged}"/>
-            <TextBlock Text="IP Адреса:" Margin="5"/>
-            <TextBox Text="{Binding ServerIp, UpdateSourceTrigger=PropertyChanged}" Width="120" Margin="5"/>
-            <TextBlock Text="Порт:" Margin="5"/>
-            <TextBox Text="{Binding ServerPort, UpdateSourceTrigger=PropertyChanged}" Width="60" Margin="5"/>
-            <Button Content="{Binding ConnectionStatus}" Margin="5" Command="{Binding ConnectCommand}" IsEnabled="{Binding !IsConnected}"/>
-            <Button Content="Відключитися" Margin="5" Command="{Binding DisconnectCommand}" IsEnabled="{Binding IsConnected}"/>
-            <TextBlock Text="{Binding ConnectionStatus}" Margin="10,5,5,5" Foreground="{Binding ConnectionStatusColor}"/>
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="Нікнейм:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+            <TextBox Text="{Binding Nickname, UpdateSourceTrigger=PropertyChanged}" Width="120" IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
+            <TextBlock Text="IP Сервера:" VerticalAlignment="Center" Margin="10,0,5,0"/>
+            <TextBox Text="{Binding ServerIp, UpdateSourceTrigger=PropertyChanged}" Width="100" IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
+            <TextBlock Text="Порт:" VerticalAlignment="Center" Margin="10,0,5,0"/>
+            <TextBox Text="{Binding ServerPort, UpdateSourceTrigger=PropertyChanged}" Width="60" IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
+            <Button Content="Підключитися" Command="{Binding ConnectCommand}"/>
+            <Button Content="Відключитися" Command="{Binding DisconnectCommand}"/>
         </StackPanel>
 
-        <ScrollViewer Grid.Row="1" Grid.Column="0" Margin="5" VerticalScrollBarVisibility="Auto" x:Name="ChatScrollViewer">
-            <ListBox x:Name="ChatListBox" ItemsSource="{Binding ChatMessages}" BorderThickness="0">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Orientation="Vertical">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding Timestamp, StringFormat='HH:mm:ss'}"/>
-                                <TextBlock Text=" - "/>
-                                <TextBlock Text="{Binding Sender}"/>
-                                <TextBlock Text=": "/>
-                                <TextBlock Text="{Binding Text}" Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Collapsed}"/>
-                            </StackPanel>
-                            <Image Source="{Binding Image}" Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}}" MaxWidth="200" MaxHeight="200"/>
-                            <TextBlock Text="{Binding FilePath}" Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Collapsed}" FontStyle="Italic"/>
-                        </StackPanel>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-                <ListBox.ItemContainerStyle>
-                    <Style TargetType="ListBoxItem">
-                        <Setter Property="Focusable" Value="False"/>
-                        <Setter Property="Padding" Value="2"/>
-                    </Style>
-                </ListBox.ItemContainerStyle>
-            </ListBox>
-        </ScrollViewer>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="200"/>
+            </Grid.ColumnDefinitions>
 
-        <Border Grid.Row="0" Grid.RowSpan="4" Grid.Column="1" BorderBrush="LightGray" BorderThickness="1" Margin="5">
-            <StackPanel>
-                <TextBlock Text="Онлайн користувачі:" FontWeight="Bold" Margin="5"/>
-                <ListBox ItemsSource="{Binding OnlineUsers}" BorderThickness="0" Background="Transparent" />
-            </StackPanel>
-        </Border>
+            <Border Grid.Column="0" BorderBrush="LightGray" BorderThickness="1">
+                <ScrollViewer x:Name="ChatScrollViewer" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding ChatMessages}" Margin="5">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type models:Message}">
+                                <Border Margin="5" Padding="8" CornerRadius="5" MaxWidth="450">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="LightBlue"/>
+                                            <Setter Property="HorizontalAlignment" Value="Left"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsOwnMessage}" Value="True">
+                                                    <Setter Property="Background" Value="LightGreen"/>
+                                                    <Setter Property="HorizontalAlignment" Value="Right"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsSystemMessage}" Value="True">
+                                                    <Setter Property="Background" Value="LightGray"/>
+                                                    <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                                                    <Setter Property="TextElement.FontStyle" Value="Italic"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="14"
+                                                   Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
 
-        <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="5" HorizontalAlignment="Stretch">
-            <TextBox Margin="0,0,5,0" Height="30" Text="{Binding MessageToSend, UpdateSourceTrigger=PropertyChanged}" KeyDown="MessageTextBox_KeyDown" VerticalAlignment="Stretch" Width="99"/>
-            <Button Content="Відправити" Margin="0,0,5,0" Width="100" Command="{Binding SendCommand}"/>
-        </StackPanel>
+                                        <Image Source="{Binding Image}" MaxHeight="200" MaxWidth="300" Stretch="Uniform"
+                                               Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
-        <StackPanel Grid.Row="3" Grid.Column="0" Orientation="Horizontal" Margin="5">
-            <Button Content="Надіслати файл" Margin="0,0,5,0" Width="100" Command="{Binding SendFileCommand}" IsEnabled="{Binding IsConnected}"/>
-            <ProgressBar Value="{Binding FileTransferProgress}" Width="200" Height="20" Minimum="0" Maximum="100" Visibility="{Binding IsFileTransferring, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            <TextBlock Text="{Binding FileTransferProgress, StringFormat='{} {0}%'}" Margin="5,0,0,0" VerticalAlignment="Center" Visibility="{Binding IsFileTransferring, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-        </StackPanel>
+                                        <TextBlock>
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Binding="{Binding IsImage}" Value="False"/>
+                                                                <Condition Binding="{Binding FilePath, Converter={StaticResource StringToBooleanConverterForNullOrEmpty}, ConverterParameter=Inverse}" Value="True"/>
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                            <Setter Property="Foreground" Value="Blue"/>
+                                                            <Setter Property="Cursor" Value="Hand"/>
+                                                            <Setter Property="TextDecorations" Value="Underline"/>
+                                                        </MultiDataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                            <Run Text="Збережено: "/> <Run Text="{Binding FilePath}"/></TextBlock>
+
+                                        <TextBlock Text="{Binding Timestamp, StringFormat='HH:mm:ss'}" FontSize="10" Foreground="DarkSlateGray" HorizontalAlignment="Right" Margin="0,3,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsSystemMessage}" Value="True">
+                                                            <Setter Property="HorizontalAlignment" Value="Center"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="LightGray"/>
+
+            <Border Grid.Column="2" BorderBrush="LightGray" BorderThickness="1" Margin="5,0,0,0">
+                <StackPanel>
+                    <TextBlock Text="Онлайн користувачі:" FontWeight="Bold" Margin="5" Padding="5" Background="AliceBlue"/>
+                    <ListBox ItemsSource="{Binding OnlineUsers}" BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" Margin="5,2"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="2" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="MessageTextBox" Grid.Column="0" Text="{Binding MessageToSend, UpdateSourceTrigger=PropertyChanged}" 
+                     IsEnabled="{Binding IsConnected}" KeyDown="MessageTextBox_KeyDown" VerticalContentAlignment="Center" MinHeight="30"/>
+            <Button Grid.Column="1" Content="Надіслати" Command="{Binding SendCommand}"/>
+            <Button Grid.Column="2" Content="Надіслати файл" Command="{Binding SendFileCommand}"/>
+        </Grid>
+
+        <StatusBar Grid.Row="3" Margin="0,5,0,0">
+            <StatusBarItem>
+                <TextBlock Text="{Binding ConnectionStatus}" Foreground="{Binding ConnectionStatusColor}"/>
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <ProgressBar Value="{Binding FileTransferProgress}" Width="150" Height="15" 
+                             Visibility="{Binding IsFileTransferring, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            </StatusBarItem>
+        </StatusBar>
     </Grid>
 </Window>

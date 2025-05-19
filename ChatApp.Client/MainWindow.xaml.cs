@@ -1,14 +1,12 @@
-﻿using System.Windows;
-using System.Windows.Controls;
+﻿using System;
+using System.Globalization;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Data; // Потрібно для IValueConverter
 using System.Windows.Input;
 using ChatApp.Client.ViewModels;
-using System.Collections.Specialized;
-using System.Threading.Tasks;
-using System.Windows.Data; // Додано для IValueConverter
-using System.Globalization; // Додано для CultureInfo
-using System; // Додано для Type
 
-namespace ChatApp.Client.Views // <-- ПЕРЕКОНАЙТЕСЯ, ЩО ЦЕЙ ПРОСТІР ІМЕН ВІРНИЙ
+namespace ChatApp.Client.Views // Або ваш актуальний простір імен
 {
     public partial class MainWindow : Window
     {
@@ -16,13 +14,20 @@ namespace ChatApp.Client.Views // <-- ПЕРЕКОНАЙТЕСЯ, ЩО ЦЕЙ П
         {
             InitializeComponent();
 
+            // DataContext може бути вже встановлений в XAML
+            // if (DataContext == null)
+            // {
+            //     DataContext = new MainWindowViewModel();
+            // }
+
+
             this.Loaded += (s, e) =>
             {
                 if (DataContext is MainWindowViewModel viewModel)
                 {
                     viewModel.ChatMessages.CollectionChanged += (sender, args) =>
                     {
-                        if (ChatListBox.Items.Count > 0)
+                        if (viewModel.ChatMessages.Count > 0 && ChatScrollViewer != null)
                         {
                             ChatScrollViewer.ScrollToBottom();
                         }
@@ -36,27 +41,14 @@ namespace ChatApp.Client.Views // <-- ПЕРЕКОНАЙТЕСЯ, ЩО ЦЕЙ П
                 {
                     if (viewModel.IsConnected)
                     {
-                        viewModel.DisconnectCommand.Execute(null);
-                        await Task.Delay(500); // Даємо час на відправку повідомлення про відключення
+                        if (viewModel.DisconnectCommand.CanExecute(null))
+                        {
+                            viewModel.DisconnectCommand.Execute(null);
+                        }
+                        await Task.Delay(250);
                     }
                 }
             };
-        }
-
-        private void ConnectButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainWindowViewModel viewModel)
-            {
-                viewModel.ConnectCommand.Execute(null);
-            }
-        }
-
-        private void SendButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (DataContext is MainWindowViewModel viewModel)
-            {
-                viewModel.SendCommand.Execute(viewModel.MessageToSend);
-            }
         }
 
         private void MessageTextBox_KeyDown(object sender, KeyEventArgs e)
@@ -65,31 +57,60 @@ namespace ChatApp.Client.Views // <-- ПЕРЕКОНАЙТЕСЯ, ЩО ЦЕЙ П
             {
                 if (DataContext is MainWindowViewModel viewModel)
                 {
-                    viewModel.SendCommand.Execute(viewModel.MessageToSend);
+                    if (viewModel.SendCommand.CanExecute(null))
+                    {
+                        viewModel.SendCommand.Execute(null);
+                    }
                 }
             }
         }
     }
 
-    // Клас конвертера BooleanToVisibilityConverter
-    // ПОВИНЕН БУТИ PUBLIC І В ТОМУ Ж ПРОСТОРІ ІМЕН, ЩО Й MainWindow
+    // --- КОНВЕРТЕРИ ---
+    // Якщо вони оголошені тут
+
     public class BooleanToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            bool boolValue = (bool)value;
-            string visibilityParam = parameter as string;
-
-            if (visibilityParam == "Hidden")
+            bool boolValue = false;
+            if (value is bool b) // Використання pattern matching для безпечного приведення типів
             {
-                return boolValue ? Visibility.Visible : Visibility.Hidden;
+                boolValue = b;
             }
-            return boolValue ? Visibility.Visible : Visibility.Collapsed;
+
+            string direction = parameter as string;
+            if (direction != null && direction.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
+            {
+                boolValue = !boolValue;
+            }
+
+            return boolValue ? Visibility.Visible : Visibility.Collapsed; // За замовчуванням Collapsed краще для компонування
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            return DependencyProperty.UnsetValue;
+            throw new NotImplementedException();
+        }
+    }
+
+    public class StringToBooleanConverterForNullOrEmpty : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            string strValue = value as string;
+            bool result = !string.IsNullOrEmpty(strValue);
+
+            if (parameter is string paramStr && paramStr.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
+            {
+                return !result;
+            }
+            return result;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
         }
     }
 }

@@ -11,7 +11,7 @@ using System.Collections.Generic;
 using ChatApp.Common.Models;
 using Microsoft.Win32;
 using System.IO;
-using MimeMapping;
+using MimeMapping; // Переконайтесь, що цей пакет встановлено (MimeMapping Nuget package)
 using System.Linq;
 using System.Windows.Media.Imaging;
 
@@ -29,7 +29,8 @@ namespace ChatApp.Client.ViewModels
 
         private double _fileTransferProgress;
         private bool _isFileTransferring;
-        private Dictionary<Guid, List<FileChunk>> _receivedFiles = new Dictionary<Guid, List<FileChunk>>();
+        // ЗМІНЕНО: Ключ словника - Guid FileId. Значення - тимчасовий об'єкт для збору файлу.
+        private Dictionary<Guid, FileReceptionState> _receivedFiles = new Dictionary<Guid, FileReceptionState>();
 
         public ObservableCollection<Message> ChatMessages { get; } = new ObservableCollection<Message>();
         public ObservableCollection<string> OnlineUsers { get; } = new ObservableCollection<string>();
@@ -37,41 +38,25 @@ namespace ChatApp.Client.ViewModels
         public string ServerIp
         {
             get => _serverIp;
-            set
-            {
-                _serverIp = value;
-                OnPropertyChanged();
-            }
+            set { _serverIp = value; OnPropertyChanged(); }
         }
 
         public int ServerPort
         {
             get => _serverPort;
-            set
-            {
-                _serverPort = value;
-                OnPropertyChanged();
-            }
+            set { _serverPort = value; OnPropertyChanged(); }
         }
 
         public string MessageToSend
         {
             get => _messageToSend;
-            set
-            {
-                _messageToSend = value;
-                OnPropertyChanged();
-            }
+            set { _messageToSend = value; OnPropertyChanged(); }
         }
 
         public string ConnectionStatus
         {
             get => _connectionStatus;
-            set
-            {
-                _connectionStatus = value;
-                OnPropertyChanged();
-            }
+            set { _connectionStatus = value; OnPropertyChanged(); }
         }
 
         public bool IsConnected
@@ -82,17 +67,18 @@ namespace ChatApp.Client.ViewModels
                 _isConnected = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(ConnectionStatusColor));
+                // Оновлення стану кнопок
+                ((RelayCommand)ConnectCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)SendCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)DisconnectCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)SendFileCommand).RaiseCanExecuteChanged();
             }
         }
 
         public string Nickname
         {
             get => _nickname;
-            set
-            {
-                _nickname = value;
-                OnPropertyChanged();
-            }
+            set { _nickname = value; OnPropertyChanged(); }
         }
 
         public Brush ConnectionStatusColor => IsConnected ? Brushes.Green : Brushes.Red;
@@ -100,21 +86,13 @@ namespace ChatApp.Client.ViewModels
         public double FileTransferProgress
         {
             get => _fileTransferProgress;
-            set
-            {
-                _fileTransferProgress = value;
-                OnPropertyChanged();
-            }
+            set { _fileTransferProgress = value; OnPropertyChanged(); }
         }
 
         public bool IsFileTransferring
         {
             get => _isFileTransferring;
-            set
-            {
-                _isFileTransferring = value;
-                OnPropertyChanged();
-            }
+            set { _isFileTransferring = value; OnPropertyChanged(); }
         }
 
         public ICommand ConnectCommand { get; }
@@ -125,71 +103,60 @@ namespace ChatApp.Client.ViewModels
         public MainWindowViewModel()
         {
             _tcpClientService = new TcpClientService();
+            // ЗМІНЕНО: Тип параметра в OnMessageReceived тепер ChatMessage
             _tcpClientService.MessageReceived += OnMessageReceived;
             _tcpClientService.ConnectionStatusChanged += OnConnectionStatusChanged;
             _tcpClientService.UserListReceived += OnUserListReceived;
 
-            ConnectCommand = new RelayCommand(async (o) => await ConnectToServerAsync());
-            SendCommand = new RelayCommand(async (o) => await SendMessageAsync());
-            DisconnectCommand = new RelayCommand(async (o) => await DisconnectFromServerAsync());
-            SendFileCommand = new RelayCommand(async (o) => await SendFileAsync());
+            ConnectCommand = new RelayCommand(async (o) => await ConnectToServerAsync(), (o) => !IsConnected && !string.IsNullOrWhiteSpace(Nickname));
+            SendCommand = new RelayCommand(async (o) => await SendMessageAsync(), (o) => IsConnected && !string.IsNullOrEmpty(MessageToSend));
+            DisconnectCommand = new RelayCommand(async (o) => await DisconnectFromServerAsync(), (o) => IsConnected);
+            SendFileCommand = new RelayCommand(async (o) => await SendFileAsync(), (o) => IsConnected && !IsFileTransferring);
         }
+
         private async Task ConnectToServerAsync()
         {
-            if (IsConnected)
-            {
-                ConnectionStatus = "Вже підключено.";
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(Nickname))
-            {
-                ConnectionStatus = "Введіть нікнейм!";
-                return;
-            }
-
-            IsConnected = false;
-            ConnectionStatus = $"Підключення до {_serverIp}:{_serverPort}...";
+            // IsConnected перевіряється в CanExecute
+            ConnectionStatus = $"Підключення до {_serverIp}:{_serverPort} як {Nickname}...";
             ChatMessages.Clear();
             OnlineUsers.Clear();
-
             await _tcpClientService.ConnectAsync(_serverIp, _serverPort, Nickname);
         }
 
         private async Task SendMessageAsync()
         {
-            if (IsConnected && !string.IsNullOrEmpty(_messageToSend))
-            {
-                await _tcpClientService.SendMessageAsync(_messageToSend);
-                ChatMessages.Add(new Message { Text = $"Ви: {_messageToSend}", Timestamp = DateTime.Now });
-                MessageToSend = string.Empty;
-            }
+            // IsConnected та MessageToSend перевіряються в CanExecute
+            var messageToActuallySend = _messageToSend; // Зберігаємо перед очищенням
+            MessageToSend = string.Empty; // Очищуємо поле вводу одразу
+
+            await _tcpClientService.SendMessageAsync(messageToActuallySend);
+            // Додаємо своє повідомлення до чату локально. Sender буде доданий сервером для інших.
+            // Або, якщо хочемо бачити "Ви:", робимо це тут.
+            // Сервер НЕ буде надсилати це повідомлення назад відправнику, якщо логіка BroadcastMessageAsync правильна.
+            ChatMessages.Add(new Message { Text = $"Ви: {messageToActuallySend}", Timestamp = DateTime.Now, Sender = Nickname, IsOwnMessage = true });
+
         }
 
         private async Task SendFileAsync()
         {
-            if (!IsConnected)
+            // IsConnected перевіряється в CanExecute
+            OpenFileDialog openFileDialog = new OpenFileDialog
             {
-                ConnectionStatus = "Не підключено до сервера.";
-                return;
-            }
-
-            OpenFileDialog openFileDialog = new OpenFileDialog();
-            openFileDialog.Filter = "All files (*.*)|*.*|Images (*.jpg;*.jpeg;*.png;*.gif)|*.jpg;*.jpeg;*.png;*.gif|Text files (*.txt)|*.txt";
-            openFileDialog.Title = "Оберіть файл для надсилання";
+                Filter = "All files (*.*)|*.*|Images (*.jpg;*.jpeg;*.png;*.gif)|*.jpg;*.jpeg;*.png;*.gif|Text files (*.txt)|*.txt",
+                Title = "Оберіть файл для надсилання"
+            };
 
             if (openFileDialog.ShowDialog() == true)
             {
                 string filePath = openFileDialog.FileName;
                 string fileName = Path.GetFileName(filePath);
-                string fileMimeType = MimeMapping.MimeUtility.GetMimeMapping(fileName);
-
+                string fileMimeType = MimeUtility.GetMimeMapping(fileName); // MimeMapping NuGet
                 long fileSize = new FileInfo(filePath).Length;
-
                 const long MaxFileSize = 50 * 1024 * 1024; // 50 MB
+
                 if (fileSize > MaxFileSize)
                 {
-                    ConnectionStatus = $"Файл занадто великий. Макс. розмір: {MaxFileSize / (1024 * 1024)} MB.";
+                    AddSystemMessageToChat($"Файл занадто великий. Макс. розмір: {MaxFileSize / (1024 * 1024)} MB.");
                     return;
                 }
 
@@ -200,14 +167,14 @@ namespace ChatApp.Client.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    ConnectionStatus = $"Помилка читання файлу: {ex.Message}";
+                    AddSystemMessageToChat($"Помилка читання файлу: {ex.Message}");
                     return;
                 }
 
                 Guid fileId = Guid.NewGuid();
-
                 IsFileTransferring = true;
                 FileTransferProgress = 0;
+                ((RelayCommand)SendFileCommand).RaiseCanExecuteChanged(); // Оновити стан кнопки
 
                 var metadataMessage = new ChatMessage
                 {
@@ -217,15 +184,23 @@ namespace ChatApp.Client.ViewModels
                     FileName = fileName,
                     FileSize = fileSize,
                     FileMimeType = fileMimeType,
-                    Content = $"Надсилання файлу: {fileName} ({fileSize / 1024} KB)"
+                    Content = $"Надсилання файлу: {fileName} ({FormatFileSize(fileSize)})"
                 };
                 await _tcpClientService.SendMessageObjectAsync(metadataMessage);
+                AddSystemMessageToChat($"Розпочато надсилання файлу: {fileName}");
 
-                int chunkSize = 1024 * 64; // 64 KB фрагмент
+                int chunkSize = 1024 * 64; // 64 KB
                 long totalChunks = (long)Math.Ceiling((double)fileSize / chunkSize);
 
                 for (int i = 0; i < totalChunks; i++)
                 {
+                    if (!IsConnected) // Перевірка з'єднання перед надсиланням кожного чанку
+                    {
+                        AddSystemMessageToChat("З'єднання втрачено під час надсилання файлу.");
+                        IsFileTransferring = false;
+                        ((RelayCommand)SendFileCommand).RaiseCanExecuteChanged();
+                        return;
+                    }
                     int offset = i * chunkSize;
                     int length = Math.Min(chunkSize, (int)(fileSize - offset));
                     byte[] chunkBytes = new byte[length];
@@ -238,10 +213,9 @@ namespace ChatApp.Client.ViewModels
                         FileId = fileId,
                         ChunkIndex = i,
                         TotalChunks = (int)totalChunks,
-                        FileData = Convert.ToBase64String(chunkBytes)
+                        FileData = Convert.ToBase64String(chunkBytes) // Дані чанку
                     };
                     await _tcpClientService.SendMessageObjectAsync(chunkMessage);
-
                     FileTransferProgress = (double)(i + 1) / totalChunks * 100;
                 }
 
@@ -250,94 +224,158 @@ namespace ChatApp.Client.ViewModels
                     Type = MessageType.FileTransferEnd,
                     Sender = Nickname,
                     FileId = fileId,
-                    FileName = fileName,
+                    FileName = fileName, // Додано FileName для консистентності
                     Content = $"Файл '{fileName}' надіслано."
                 };
                 await _tcpClientService.SendMessageObjectAsync(endMessage);
 
                 IsFileTransferring = false;
-                FileTransferProgress = 100;
-
-                ChatMessages.Add(new Message { Text = $"Ви надіслали файл: {fileName}", Timestamp = DateTime.Now });
+                FileTransferProgress = 100; // Або 0 після завершення
+                ((RelayCommand)SendFileCommand).RaiseCanExecuteChanged();
+                ChatMessages.Add(new Message { Text = $"Ви надіслали файл: {fileName}", Timestamp = DateTime.Now, Sender = Nickname, IsOwnMessage = true });
             }
         }
 
         private async Task DisconnectFromServerAsync()
         {
-            if (IsConnected)
-            {
-                await _tcpClientService.DisconnectAsync();
-            }
+            // IsConnected перевіряється в CanExecute
+            await _tcpClientService.DisconnectAsync();
+            // ConnectionStatus та IsConnected оновляться через подію OnConnectionStatusChanged
         }
 
-        private void OnMessageReceived(string message)
+        // ЗМІНЕНО: Параметр тепер ChatMessage
+        private void OnMessageReceived(ChatMessage receivedObject)
         {
-            Task.Run(async () => await OnMessageReceivedAsync(ChatMessage.FromJson(message)));
+            // Викликаємо асинхронний обробник
+            Task.Run(async () => await OnMessageReceivedAsync(receivedObject));
         }
 
         private async Task OnMessageReceivedAsync(ChatMessage receivedObject)
         {
+            // Перемикання на UI потік для оновлення ObservableCollection
             await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 switch (receivedObject.Type)
                 {
                     case MessageType.ChatMessage:
+                        ChatMessages.Add(new Message
+                        {
+                            Text = $"{receivedObject.Sender}: {receivedObject.Content}",
+                            Timestamp = receivedObject.Timestamp,
+                            Sender = receivedObject.Sender,
+                            IsOwnMessage = receivedObject.Sender == Nickname // Визначаємо, чи це наше повідомлення (якщо сервер не фільтрує)
+                        });
+                        break;
                     case MessageType.SystemMessage:
-                        ChatMessages.Add(new Message { Text = receivedObject.Content, Timestamp = receivedObject.Timestamp, Sender = receivedObject.Sender });
-                        break;
-                    case MessageType.UserList:
-                        List<string> users = receivedObject.Content.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).ToList();
-                        OnlineUsers.Clear();
-                        foreach (var user in users)
+                        if (receivedObject.Content == "Нікнейм вже зайнятий, спробуйте інший!")
                         {
-                            OnlineUsers.Add(user);
+                            ConnectionStatus = receivedObject.Content;
+                            // Потенційно розірвати з'єднання або змусити користувача змінити нік
+                            Task.Run(async () => await _tcpClientService.DisconnectAsync()); // Розриваємо з'єднання
+                        }
+                        else
+                        {
+                            ChatMessages.Add(new Message { Text = receivedObject.Content, Timestamp = receivedObject.Timestamp, Sender = "System", IsSystemMessage = true });
                         }
                         break;
-                    case MessageType.Disconnect:
+                    // case MessageType.UserList: // Обробляється в OnUserListReceived
+                    //    break;
+                    case MessageType.Disconnect: // Обробляється в OnConnectionStatusChanged або просто ігнорується, якщо це підтвердження
+                        // Зазвичай це призведе до спрацювання OnConnectionStatusChanged(false)
                         break;
-                    case MessageType.FileTransferMetadata:
-                        ChatMessages.Add(new Message { Text = $"[{receivedObject.Timestamp.ToString("HH:mm:ss")}] {receivedObject.Sender} хоче надіслати файл: {receivedObject.FileName} ({receivedObject.FileSize / 1024} KB).", Timestamp = receivedObject.Timestamp, Sender = receivedObject.Sender });
-                        _receivedFiles[receivedObject.FileId] = new List<FileChunk>();
-                        break;
-                    case MessageType.FileTransferChunk:
-                        if (receivedObject.FileId != Guid.Empty && receivedObject.FileData != null)
-                        {
-                            if (!_receivedFiles.ContainsKey(receivedObject.FileId))
-                            {
-                                _receivedFiles[receivedObject.FileId] = new List<FileChunk>();
-                            }
-                            _receivedFiles[receivedObject.FileId].Add(new FileChunk { ChunkIndex = receivedObject.ChunkIndex, FileData = receivedObject.FileData });
-                            if (_receivedFiles[receivedObject.FileId].Count == receivedObject.TotalChunks)
-                            {
-                                string allData = string.Join("", _receivedFiles[receivedObject.FileId].OrderBy(c => c.ChunkIndex).Select(c => c.FileData));
-                                byte[] fileBytes = Convert.FromBase64String(allData);
-                                string tempFilePath = Path.Combine(Path.GetTempPath(), receivedObject.FileName);
-                                File.WriteAllBytes(tempFilePath, fileBytes);
 
-                                if (receivedObject.FileMimeType.StartsWith("image/"))
-                                {
-                                    BitmapImage bitmap = new BitmapImage();
-                                    using (var ms = new MemoryStream(fileBytes))
-                                    {
-                                        bitmap.BeginInit();
-                                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                                        bitmap.StreamSource = ms;
-                                        bitmap.EndInit();
-                                    }
-                                    ChatMessages.Add(new Message { Timestamp = receivedObject.Timestamp, Sender = receivedObject.Sender, Image = bitmap, IsImage = true });
-                                }
-                                else
-                                {
-                                    ChatMessages.Add(new Message { Text = $"[{receivedObject.Timestamp.ToString("HH:mm:ss")}] {receivedObject.Sender} файл '{receivedObject.FileName}' отримано та збережено: {tempFilePath}", Timestamp = receivedObject.Timestamp, FilePath = tempFilePath, IsImage = false, Sender = receivedObject.Sender });
-                                }
-                                _receivedFiles.Remove(receivedObject.FileId);
-                            }
+                    case MessageType.FileTransferMetadata:
+                        if (receivedObject.FileId != Guid.Empty && !string.IsNullOrEmpty(receivedObject.FileName))
+                        {
+                            AddSystemMessageToChat($"[{receivedObject.Timestamp:HH:mm:ss}] {receivedObject.Sender} хоче надіслати файл: {receivedObject.FileName} ({FormatFileSize(receivedObject.FileSize)}).");
+                            _receivedFiles[receivedObject.FileId] = new FileReceptionState(receivedObject.FileName, receivedObject.FileSize, receivedObject.FileMimeType, (int)receivedObject.TotalChunks);
                         }
                         break;
-                    case MessageType.FileTransferEnd:
+
+                    case MessageType.FileTransferChunk:
+                        if (receivedObject.FileId != Guid.Empty &&
+                            _receivedFiles.TryGetValue(receivedObject.FileId, out FileReceptionState fileState) &&
+                            !string.IsNullOrEmpty(receivedObject.FileData))
+                        {
+                            try
+                            {
+                                byte[] chunkData = Convert.FromBase64String(receivedObject.FileData);
+                                fileState.AddChunk(receivedObject.ChunkIndex, chunkData);
+
+                                // Оновлення прогресу отримання (якщо потрібно відображати)
+                                // double progress = fileState.GetReceptionProgress();
+                                // AddSystemMessageToChat($"Отримано чанк {receivedObject.ChunkIndex + 1}/{fileState.TotalChunks} для {fileState.FileName}");
+
+                                if (fileState.IsComplete())
+                                {
+                                    byte[] assembledFileBytes = fileState.GetAssembledFile();
+                                    string downloadsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ChatAppDownloads");
+                                    Directory.CreateDirectory(downloadsPath); // Створюємо папку, якщо її немає
+                                    string tempFilePath = Path.Combine(downloadsPath, fileState.FileName);
+
+                                    // Запобігання перезапису файлів з однаковими іменами
+                                    int count = 1;
+                                    string fileNameOnly = Path.GetFileNameWithoutExtension(tempFilePath);
+                                    string extension = Path.GetExtension(tempFilePath);
+                                    while (File.Exists(tempFilePath))
+                                    {
+                                        tempFilePath = Path.Combine(downloadsPath, $"{fileNameOnly} ({count++}){extension}");
+                                    }
+
+                                    File.WriteAllBytes(tempFilePath, assembledFileBytes);
+
+                                    if (fileState.MimeType.StartsWith("image/"))
+                                    {
+                                        BitmapImage bitmap = new BitmapImage();
+                                        using (var ms = new MemoryStream(assembledFileBytes))
+                                        {
+                                            bitmap.BeginInit();
+                                            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                                            bitmap.StreamSource = ms;
+                                            bitmap.EndInit();
+                                            bitmap.Freeze(); // Важливо для використання в іншому потоці (UI)
+                                        }
+                                        ChatMessages.Add(new Message { Timestamp = receivedObject.Timestamp, Sender = receivedObject.Sender, Image = bitmap, IsImage = true, FilePath = tempFilePath /* Зберігаємо шлях */ });
+                                        AddSystemMessageToChat($"Зображення '{fileState.FileName}' отримано від {receivedObject.Sender} та збережено: {tempFilePath}");
+                                    }
+                                    else
+                                    {
+                                        ChatMessages.Add(new Message { Text = $"Файл '{fileState.FileName}' отримано від {receivedObject.Sender} та збережено: {tempFilePath}", Timestamp = receivedObject.Timestamp, FilePath = tempFilePath, IsImage = false, Sender = receivedObject.Sender });
+                                    }
+                                    _receivedFiles.Remove(receivedObject.FileId);
+                                }
+                            }
+                            catch (FormatException ex) { AddSystemMessageToChat($"Помилка Base64 для чанку файлу {fileState.FileName}: {ex.Message}"); }
+                            catch (Exception ex) { AddSystemMessageToChat($"Помилка обробки чанку файлу {fileState.FileName}: {ex.Message}"); }
+                        }
                         break;
+
+                    case MessageType.FileTransferEnd:
+                        if (receivedObject.FileId != Guid.Empty && _receivedFiles.ContainsKey(receivedObject.FileId))
+                        {
+                            // Якщо файл ще не зібраний (наприклад, не всі чанки прийшли), це повідомлення може бути інформативним.
+                            // Зазвичай, FileTransferChunk має зібрати файл.
+                            // Можна додати логіку перевірки, чи файл дійсно зібраний.
+                            if (!_receivedFiles[receivedObject.FileId].IsComplete())
+                            {
+                                AddSystemMessageToChat($"Отримано сигнал завершення для файлу '{receivedObject.FileName}', але не всі частини зібрано.");
+                                // Можливо, варто видалити незавершений файл із _receivedFiles
+                            }
+                            else
+                            {
+                                // Файл вже має бути оброблений логікою FileTransferChunk
+                                //AddSystemMessageToChat($"Передачу файлу '{receivedObject.FileName}' від {receivedObject.Sender} завершено.");
+                            }
+                            // _receivedFiles.Remove(receivedObject.FileId); // Видаляємо, якщо ще не видалено
+                        }
+                        break;
+
                     default:
-                        ChatMessages.Add(new Message { Text = receivedObject.Content, Timestamp = receivedObject.Timestamp, Sender = receivedObject.Sender });
+                        // Обробка невідомих типів або UserList, якщо не винесено окремо
+                        if (receivedObject.Type != MessageType.UserList) // UserList обробляється в OnUserListReceived
+                        {
+                            ChatMessages.Add(new Message { Text = $"Невідомий тип: {receivedObject.Sender}: {receivedObject.Content}", Timestamp = receivedObject.Timestamp, Sender = receivedObject.Sender });
+                        }
                         break;
                 }
             });
@@ -345,13 +383,21 @@ namespace ChatApp.Client.ViewModels
 
         private void OnConnectionStatusChanged(bool isConnected)
         {
-            IsConnected = isConnected;
-            ConnectionStatus = isConnected ? "Підключено" : "Не підключено";
-            if (!isConnected)
+            System.Windows.Application.Current.Dispatcher.Invoke(() => // Переконайтесь, що це в UI потоці
             {
-                OnlineUsers.Clear();
-                ChatMessages.Clear();
-            }
+                IsConnected = isConnected;
+                ConnectionStatus = isConnected ? $"Підключено як {Nickname}" : "Не підключено";
+                if (!isConnected)
+                {
+                    OnlineUsers.Clear();
+                    // ChatMessages.Clear(); // Можливо, не варто очищати чат при дисконекті, щоб користувач бачив історію
+                    AddSystemMessageToChat("З'єднання з сервером розірвано.");
+                }
+                else
+                {
+                    AddSystemMessageToChat("З'єднано з сервером!");
+                }
+            });
         }
 
         private void OnUserListReceived(List<string> users)
@@ -359,27 +405,89 @@ namespace ChatApp.Client.ViewModels
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
                 OnlineUsers.Clear();
-                foreach (var user in users)
-                {
-                    OnlineUsers.Add(user);
-                }
+                users.ForEach(OnlineUsers.Add);
             });
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        private void AddSystemMessageToChat(string text)
+        {
+            // Переконайтеся, що оновлення колекції відбувається в UI-потоці
+            System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                ChatMessages.Add(new Message { Text = text, Timestamp = DateTime.Now, Sender = "System", IsSystemMessage = true });
+            });
+        }
 
+        private string FormatFileSize(long bytes)
+        {
+            string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
+            int i = 0;
+            double dblSByte = bytes;
+            while (dblSByte >= 1024 && i < suffixes.Length - 1)
+            {
+                dblSByte /= 1024;
+                i++;
+            }
+            return $"{dblSByte:0.##} {suffixes[i]}";
+        }
+
+
+        public event PropertyChangedEventHandler PropertyChanged;
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
+
+        // Внутрішній клас для відстеження стану отримання файлу
+        private class FileReceptionState
+        {
+            public string FileName { get; }
+            public long FileSize { get; }
+            public string MimeType { get; }
+            public int TotalChunks { get; }
+            private readonly List<byte[]> _chunks;
+            private int _receivedChunksCount;
+
+            public FileReceptionState(string fileName, long fileSize, string mimeType, int totalChunks)
+            {
+                FileName = fileName;
+                FileSize = fileSize;
+                MimeType = mimeType;
+                TotalChunks = totalChunks;
+                _chunks = new List<byte[]>(new byte[totalChunks][]);
+                _receivedChunksCount = 0;
+            }
+
+            public void AddChunk(int index, byte[] data)
+            {
+                if (index >= 0 && index < TotalChunks && _chunks[index] == null)
+                {
+                    _chunks[index] = data;
+                    _receivedChunksCount++;
+                }
+            }
+
+            public bool IsComplete() => _receivedChunksCount == TotalChunks && _chunks.All(c => c != null);
+
+            public byte[] GetAssembledFile()
+            {
+                if (!IsComplete()) throw new InvalidOperationException("Файл не повністю отримано.");
+                using (var ms = new MemoryStream())
+                {
+                    for (int i = 0; i < TotalChunks; i++)
+                    {
+                        ms.Write(_chunks[i], 0, _chunks[i].Length);
+                    }
+                    return ms.ToArray();
+                }
+            }
+            public double GetReceptionProgress() => TotalChunks == 0 ? 0 : (double)_receivedChunksCount / TotalChunks * 100;
+        }
     }
 
-    internal class FileChunk
-    {
-        public int ChunkIndex { get; set; }
-        public string FileData { get; set; }
-    }
 
+    // Клас RelayCommand (якщо він не визначений в іншому місці глобально)
+    // Переконайтесь, що CanExecuteChanged викликається, коли змінюються умови виконання команди
     public class RelayCommand : ICommand
     {
         private readonly Func<object, Task> _executeAsync;
@@ -419,6 +527,11 @@ namespace ChatApp.Client.ViewModels
         {
             add => CommandManager.RequerySuggested += value;
             remove => CommandManager.RequerySuggested -= value;
+        }
+
+        public void RaiseCanExecuteChanged() // Додайте цей метод
+        {
+            CommandManager.InvalidateRequerySuggested();
         }
     }
 }
