@@ -3,9 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:vm="clr-namespace:ChatApp.Client.ViewModels"
+        xmlns:vm="clr-namespace:ChatApp.Client.ViewModels" 
         xmlns:models="clr-namespace:ChatApp.Client.Models"
-        xmlns:local="clr-namespace:ChatApp.Client.Views" mc:Ignorable="d"
+        xmlns:views="clr-namespace:ChatApp.Client.Views" 
+        xmlns:conv="clr-namespace:ChatApp.Client.Converters" mc:Ignorable="d"
         Title="ChatApp Client" Height="600" Width="800"
         WindowStartupLocation="CenterScreen">
 
@@ -15,11 +16,8 @@
 
     <Window.Resources>
         <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-            </ResourceDictionary.MergedDictionaries>
-
-            <local:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-            <local:StringToBooleanConverterForNullOrEmpty x:Key="StringToBooleanConverterForNullOrEmpty"/>
+            <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+            <conv:StringToBooleanConverterForNullOrEmpty x:Key="StringToBooleanConverterForNullOrEmpty"/>
 
             <Style TargetType="Button">
                 <Setter Property="Padding" Value="10,5"/>
@@ -28,9 +26,6 @@
             <Style TargetType="TextBox">
                 <Setter Property="Padding" Value="5"/>
                 <Setter Property="Margin" Value="5"/>
-            </Style>
-            <Style TargetType="ListBoxItem">
-                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             </Style>
             <Style TargetType="ItemsControl">
                 <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -48,11 +43,14 @@
 
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
             <TextBlock Text="Нікнейм:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-            <TextBox Text="{Binding Nickname, UpdateSourceTrigger=PropertyChanged}" Width="120" IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
+            <TextBox Text="{Binding Nickname, UpdateSourceTrigger=PropertyChanged}" Width="120" 
+                     IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
             <TextBlock Text="IP Сервера:" VerticalAlignment="Center" Margin="10,0,5,0"/>
-            <TextBox Text="{Binding ServerIp, UpdateSourceTrigger=PropertyChanged}" Width="100" IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
+            <TextBox Text="{Binding ServerIp, UpdateSourceTrigger=PropertyChanged}" Width="100" 
+                     IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
             <TextBlock Text="Порт:" VerticalAlignment="Center" Margin="10,0,5,0"/>
-            <TextBox Text="{Binding ServerPort, UpdateSourceTrigger=PropertyChanged}" Width="60" IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
+            <TextBox Text="{Binding ServerPort, UpdateSourceTrigger=PropertyChanged}" Width="60" 
+                     IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
             <Button Content="Підключитися" Command="{Binding ConnectCommand}"/>
             <Button Content="Відключитися" Command="{Binding DisconnectCommand}"/>
         </StackPanel>
@@ -88,13 +86,14 @@
                                         </Style>
                                     </Border.Style>
                                     <StackPanel>
+                                        <Image Source="{Binding Image}" MaxHeight="200" MaxWidth="300" Stretch="Uniform" Margin="0,0,0,5"
+                                               Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
                                         <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="14"
                                                    Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
 
-                                        <Image Source="{Binding Image}" MaxHeight="200" MaxWidth="300" Stretch="Uniform"
-                                               Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-
-                                        <TextBlock>
+                                        <TextBlock Cursor="Hand" ToolTip="{Binding FilePath}"
+                                                   Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
                                                     <Setter Property="Visibility" Value="Collapsed"/>
@@ -102,17 +101,23 @@
                                                         <MultiDataTrigger>
                                                             <MultiDataTrigger.Conditions>
                                                                 <Condition Binding="{Binding IsImage}" Value="False"/>
-                                                                <Condition Binding="{Binding FilePath, Converter={StaticResource StringToBooleanConverterForNullOrEmpty}, ConverterParameter=Inverse}" Value="True"/>
+                                                                <Condition Binding="{Binding FilePath, Converter={StaticResource StringToBooleanConverterForNullOrEmpty}}" Value="True"/>
                                                             </MultiDataTrigger.Conditions>
                                                             <Setter Property="Visibility" Value="Visible"/>
-                                                            <Setter Property="Foreground" Value="Blue"/>
-                                                            <Setter Property="Cursor" Value="Hand"/>
-                                                            <Setter Property="TextDecorations" Value="Underline"/>
+                                                            <Setter Property="Foreground" Value="DimGray"/>
+                                                            <Setter Property="FontSize" Value="11"/>
+                                                            <Setter Property="FontStyle" Value="Italic"/>
+                                                            <Setter Property="Margin" Value="0,3,0,0"/>
                                                         </MultiDataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </TextBlock.Style>
-                                            <Run Text="Збережено: "/> <Run Text="{Binding FilePath}"/></TextBlock>
+                                            <Run Text="[Файл: "/>
+                                            <Hyperlink NavigateUri="{Binding FilePath, TargetNullValue=''}" RequestNavigate="Hyperlink_RequestNavigate" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TextBlock}, Path=Foreground}">
+                                                <Run Text="{Binding FileNameFromPath}"/>
+                                            </Hyperlink>
+                                            <Run Text="]"/>
+                                        </TextBlock>
 
                                         <TextBlock Text="{Binding Timestamp, StringFormat='HH:mm:ss'}" FontSize="10" Foreground="DarkSlateGray" HorizontalAlignment="Right" Margin="0,3,0,0">
                                             <TextBlock.Style>

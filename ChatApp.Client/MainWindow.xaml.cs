@@ -1,12 +1,12 @@
 ﻿using System;
-using System.Globalization;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Data; // Потрібно для IValueConverter
 using System.Windows.Input;
-using ChatApp.Client.ViewModels;
+using System.Windows.Navigation; // Для RequestNavigateEventArgs
+using ChatApp.Client.ViewModels; // Переконайтеся, що цей простір імен правильний
 
-namespace ChatApp.Client.Views // Або ваш актуальний простір імен
+namespace ChatApp.Client.Views // Переконайтеся, що цей простір імен правильний
 {
     public partial class MainWindow : Window
     {
@@ -14,30 +14,43 @@ namespace ChatApp.Client.Views // Або ваш актуальний прост�
         {
             InitializeComponent();
 
-            // DataContext може бути вже встановлений в XAML
-            // if (DataContext == null)
+            // DataContext встановлюється в XAML через <vm:MainWindowViewModel/>
+            // Якщо виникають проблеми з цим, можна тимчасово встановити тут для діагностики:
+            // if (this.DataContext == null)
             // {
-            //     DataContext = new MainWindowViewModel();
+            //    try
+            //    {
+            //        this.DataContext = new MainWindowViewModel();
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        MessageBox.Show("Помилка створення MainWindowViewModel в MainWindow.xaml.cs: " + ex.Message);
+            //    }
             // }
-
 
             this.Loaded += (s, e) =>
             {
-                if (DataContext is MainWindowViewModel viewModel)
+                if (this.DataContext is MainWindowViewModel viewModel)
                 {
                     viewModel.ChatMessages.CollectionChanged += (sender, args) =>
                     {
                         if (viewModel.ChatMessages.Count > 0 && ChatScrollViewer != null)
                         {
-                            ChatScrollViewer.ScrollToBottom();
+                            // Загортаємо в Dispatcher на випадок, якщо CollectionChanged викликається з фонового потоку
+                            ChatScrollViewer.Dispatcher.InvokeAsync(() => ChatScrollViewer.ScrollToBottom());
                         }
                     };
+                }
+                else
+                {
+                    // Це може статися, якщо DataContext не встановлено або має неправильний тип
+                    Debug.WriteLine("[MainWindow.Loaded] DataContext не є MainWindowViewModel або null.");
                 }
             };
 
             this.Closing += async (sender, e) =>
             {
-                if (DataContext is MainWindowViewModel viewModel)
+                if (this.DataContext is MainWindowViewModel viewModel)
                 {
                     if (viewModel.IsConnected)
                     {
@@ -45,17 +58,19 @@ namespace ChatApp.Client.Views // Або ваш актуальний прост�
                         {
                             viewModel.DisconnectCommand.Execute(null);
                         }
+                        // Даємо невелику затримку, щоб повідомлення про відключення встигло надіслатися
                         await Task.Delay(250);
                     }
                 }
             };
         }
 
+        // Обробник для надсилання повідомлення по натисканню Enter в TextBox
         private void MessageTextBox_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
             {
-                if (DataContext is MainWindowViewModel viewModel)
+                if (this.DataContext is MainWindowViewModel viewModel) // this.DataContext, а не DataContext
                 {
                     if (viewModel.SendCommand.CanExecute(null))
                     {
@@ -64,53 +79,41 @@ namespace ChatApp.Client.Views // Або ваш актуальний прост�
                 }
             }
         }
-    }
 
-    // --- КОНВЕРТЕРИ ---
-    // Якщо вони оголошені тут
-
-    public class BooleanToVisibilityConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        // Обробник для Hyperlink, щоб відкрити файл або папку
+        private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
         {
-            bool boolValue = false;
-            if (value is bool b) // Використання pattern matching для безпечного приведення типів
+            if (e.Uri == null || string.IsNullOrWhiteSpace(e.Uri.OriginalString))
             {
-                boolValue = b;
+                e.Handled = true;
+                return;
             }
 
-            string direction = parameter as string;
-            if (direction != null && direction.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
+            try
             {
-                boolValue = !boolValue;
+                string filePath = e.Uri.IsAbsoluteUri ? e.Uri.LocalPath : e.Uri.OriginalString;
+
+                if (!string.IsNullOrEmpty(filePath) && System.IO.File.Exists(filePath))
+                {
+                    Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
+                }
+                else if (!string.IsNullOrEmpty(filePath) && System.IO.Directory.Exists(filePath))
+                {
+                    Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
+                }
+                else
+                {
+                    Debug.WriteLine($"[Hyperlink_RequestNavigate] Не вдалося відкрити: '{filePath}'. Файл або папка не існує.");
+                    // Можна показати MessageBox, якщо потрібно
+                    // MessageBox.Show($"Не вдалося відкрити: {filePath}\nФайл або папка не існує.", "Помилка відкриття", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
             }
-
-            return boolValue ? Visibility.Visible : Visibility.Collapsed; // За замовчуванням Collapsed краще для компонування
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    public class StringToBooleanConverterForNullOrEmpty : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            string strValue = value as string;
-            bool result = !string.IsNullOrEmpty(strValue);
-
-            if (parameter is string paramStr && paramStr.Equals("Inverse", StringComparison.OrdinalIgnoreCase))
+            catch (Exception ex)
             {
-                return !result;
+                Debug.WriteLine($"[Hyperlink_RequestNavigate] Помилка при спробі відкрити '{e.Uri?.OriginalString}': {ex.Message}");
+                // MessageBox.Show($"Помилка при спробі відкрити файл: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-            return result;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            throw new NotImplementedException();
+            e.Handled = true;
         }
     }
 }

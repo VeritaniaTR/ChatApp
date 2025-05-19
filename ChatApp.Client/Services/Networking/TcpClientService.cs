@@ -1,14 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
-using ChatApp.Common.Utilities;
-using System.Security.Cryptography;
 using ChatApp.Common.Models;
+using ChatApp.Common.Utilities;
 using Newtonsoft.Json;
-using System.Diagnostics; // Для Debug.WriteLine
 
 namespace ChatApp.Client.Services.Networking
 {
@@ -40,7 +40,8 @@ namespace ChatApp.Client.Services.Networking
             }
             if (_client != null && !_client.Connected)
             {
-                _client.Dispose();
+                Debug.WriteLine($"Клієнт ({_clientNickname}): Існує попередній об'єкт TcpClient, але не підключений. Знищення старого.");
+                try { _client.Dispose(); } catch { /* ігнор */ }
                 _client = null;
             }
 
@@ -59,9 +60,7 @@ namespace ChatApp.Client.Services.Networking
                     Content = "Підключення клієнта..."
                 };
                 string jsonConnectMessage = connectMessage.ToJson();
-                // === ЗМІНА: Додано логування JSON, що надсилається ===
                 Debug.WriteLine($"КЛІЄНТ ({_clientNickname}): Перше повідомлення JSON для надсилання: {jsonConnectMessage}");
-                // =====================================================
                 string encryptedData = EncryptionHelper.Encrypt(jsonConnectMessage);
                 byte[] data = Encoding.UTF8.GetBytes(encryptedData + "\n");
 
@@ -74,7 +73,7 @@ namespace ChatApp.Client.Services.Networking
             }
             catch (SocketException ex)
             {
-                Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка сокета при підключенні: {ex.Message} (Код: {ex.SocketErrorCode})");
+                Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка сокета при підключенні: {ex.Message} (Код: {ex.SocketErrorCode})\n{ex.StackTrace}");
                 ConnectionStatusChanged?.Invoke(false);
                 await SafeDisconnectAsync();
             }
@@ -86,12 +85,11 @@ namespace ChatApp.Client.Services.Networking
             }
         }
 
-        // ... (SendMessageObjectAsync, SendMessageAsync - без змін відносно попередньої версії з логуванням) ...
         public async Task SendMessageObjectAsync(ChatMessage messageObject)
         {
             if (!IsConnected || _stream == null)
             {
-                Debug.WriteLine($"Клієнт ({_clientNickname}): Спроба надіслати повідомлення без активного з'єднання.");
+                Debug.WriteLine($"Клієнт ({_clientNickname}): Спроба надіслати повідомлення '{messageObject.Type}' без активного з'єднання.");
                 return;
             }
             try
@@ -104,9 +102,10 @@ namespace ChatApp.Client.Services.Networking
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка надсилання об'єкта повідомлення: {ex.Message}");
+                Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка надсилання об'єкта повідомлення '{messageObject.Type}': {ex.Message}");
                 if (ex is System.IO.IOException || ex is SocketException)
                 {
+                    Debug.WriteLine($"Клієнт ({_clientNickname}): Серйозна помилка надсилання, ініціюю відключення.");
                     await SafeDisconnectAsync();
                 }
             }
@@ -125,40 +124,34 @@ namespace ChatApp.Client.Services.Networking
 
         private void StartReceiving()
         {
-            Debug.WriteLine($"Клієнт ({_clientNickname}): Запуск потоку отримання повідомлень.");
+            Debug.WriteLine($"Клієнт ({_clientNickname}): Запуск потоку отримання повідомлень (StartReceiving).");
             Task.Run(async () => await ReceiveAsync()).ContinueWith(t =>
             {
                 if (t.IsFaulted && t.Exception != null)
                 {
                     var baseException = t.Exception.GetBaseException();
-                    Debug.WriteLine($"КЛІЄНТ ({_clientNickname}): КРИТИЧНА ПОМИЛКА В ПОТОЦІ ОТРИМАННЯ: {baseException.Message}\nСТЕК: {baseException.StackTrace}");
-
+                    Debug.WriteLine($"КЛІЄНТ ({_clientNickname}): КРИТИЧНА ПОМИЛКА В ПОТОЦІ ОТРИМАННЯ (ReceiveAsync): {baseException.Message}\nСТЕК: {baseException.StackTrace}");
                     System.Windows.Application.Current?.Dispatcher.Invoke(() =>
                     {
                         ConnectionStatusChanged?.Invoke(false);
                     });
-                    Task.Run(async () => await SafeDisconnectAsync());
+                    // Не викликаємо SafeDisconnectAsync звідси, оскільки finally в ReceiveAsync має це зробити
                 }
                 else if (t.IsCanceled)
                 {
                     Debug.WriteLine($"КЛІЄНТ ({_clientNickname}): Потік отримання було скасовано.");
                 }
-                else
-                {
-                    // Це логування може бути зайвим, якщо відключення штатне
-                    // Debug.WriteLine($"КЛІЄНТ ({_clientNickname}): Потік отримання завершив роботу.");
-                }
-            });
+                // Не логуємо "завершив роботу штатно", бо це може статися при нормальному відключенні
+            }, TaskContinuationOptions.ExecuteSynchronously); // ExecuteSynchronously, щоб гарантувати виконання до виходу з програми, якщо це головний потік (тут не зовсім так, але може допомогти з логуванням)
         }
 
         private async Task ReceiveAsync()
         {
+            StringBuilder receivedDataBuilder = new StringBuilder(); // Локальний буфер для цього виклику
+            byte[] buffer = new byte[8192];
+            Debug.WriteLine($"Клієнт ({_clientNickname}): Потік ReceiveAsync розпочато, очікування даних...");
             try
             {
-                byte[] buffer = new byte[8192];
-                StringBuilder receivedDataBuilder = new StringBuilder();
-                // Debug.WriteLine($"Клієнт ({_clientNickname}): Потік ReceiveAsync розпочато, очікування даних...");
-
                 while (_client != null && _client.Connected && _stream != null && _stream.CanRead)
                 {
                     int bytesRead = 0;
@@ -168,33 +161,40 @@ namespace ChatApp.Client.Services.Networking
                     }
                     catch (System.IO.IOException ex)
                     {
-                        Debug.WriteLine($"Клієнт ({_clientNickname}): IOException під час читання з потоку: {ex.Message}. З'єднання буде закрито.");
+                        Debug.WriteLine($"Клієнт ({_clientNickname}): IOException під час читання з потоку в ReceiveAsync: {ex.Message}. З'єднання буде закрито.");
                         break;
                     }
                     catch (ObjectDisposedException ex)
                     {
-                        Debug.WriteLine($"Клієнт ({_clientNickname}): ObjectDisposedException під час читання з потоку: {ex.Message}. З'єднання буде закрито.");
+                        Debug.WriteLine($"Клієнт ({_clientNickname}): ObjectDisposedException під час читання з потоку в ReceiveAsync: {ex.Message}. З'єднання буде закрито.");
                         break;
                     }
 
                     if (bytesRead == 0)
                     {
-                        Debug.WriteLine($"Клієнт ({_clientNickname}): Сервер закрив з'єднання або з'єднання втрачено (bytesRead == 0).");
+                        Debug.WriteLine($"Клієнт ({_clientNickname}): Сервер закрив з'єднання або з'єднання втрачено (bytesRead == 0) в ReceiveAsync.");
                         break;
                     }
 
-                    receivedDataBuilder.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead));
+                    string receivedChunk = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                    // Debug.WriteLine($"Клієнт ({_clientNickname}): Отримано фрагмент в ReceiveAsync: '{receivedChunk.Replace("\n", "\\n")}'");
+                    receivedDataBuilder.Append(receivedChunk);
                     string currentBufferContent = receivedDataBuilder.ToString();
                     int newlineIndex;
 
                     while ((newlineIndex = currentBufferContent.IndexOf('\n')) != -1)
                     {
-                        string fullEncryptedMessage = currentBufferContent.Substring(0, newlineIndex);
+                        string fullEncryptedMessage = currentBufferContent.Substring(0, newlineIndex).Trim(); // Trim!
                         receivedDataBuilder.Remove(0, newlineIndex + 1);
                         currentBufferContent = receivedDataBuilder.ToString();
 
-                        if (string.IsNullOrWhiteSpace(fullEncryptedMessage)) continue;
+                        if (string.IsNullOrWhiteSpace(fullEncryptedMessage))
+                        {
+                            Debug.WriteLine($"Клієнт ({_clientNickname}): Пропущено порожнє повідомлення після Trim.");
+                            continue;
+                        }
 
+                        // Debug.WriteLine($"Клієнт ({_clientNickname}): Обробка повідомлення: '{fullEncryptedMessage.Substring(0, Math.Min(fullEncryptedMessage.Length, 50))}'...");
                         try
                         {
                             string decryptedJson = EncryptionHelper.Decrypt(fullEncryptedMessage);
@@ -205,80 +205,60 @@ namespace ChatApp.Client.Services.Networking
                                 MessageReceived?.Invoke(receivedObject);
                                 if (receivedObject.Type == MessageType.UserList)
                                 {
-                                    List<string> users = receivedObject.Content.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+                                    List<string> users = receivedObject.Content?.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).ToList() ?? new List<string>();
                                     UserListReceived?.Invoke(users);
                                 }
                             }
                             else
                             {
-                                Debug.WriteLine($"Клієнт ({_clientNickname}): Не вдалося десеріалізувати JSON в ChatMessage. JSON: {decryptedJson}");
+                                Debug.WriteLine($"Клієнт ({_clientNickname}): Не вдалося десеріалізувати JSON в ChatMessage. JSON: '{decryptedJson.Substring(0, Math.Min(decryptedJson.Length, 100))}'...");
                             }
                         }
-                        catch (JsonSerializationException ex)
+                        catch (Exception ex_inner_loop) // Ловимо всі помилки обробки одного повідомлення
                         {
-                            Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка десеріалізації JSON: {ex.Message}. Зашифроване: '{fullEncryptedMessage.Substring(0, Math.Min(fullEncryptedMessage.Length, 100))}'... Розшифрований (спроба): '{TryDecrypt(fullEncryptedMessage)}'");
-                        }
-                        catch (FormatException ex)
-                        {
-                            Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка формату (можливо Base64) при дешифруванні: {ex.Message}. Зашифроване: '{fullEncryptedMessage.Substring(0, Math.Min(fullEncryptedMessage.Length, 100))}'...");
-                        }
-                        catch (CryptographicException ex)
-                        {
-                            Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка криптографії при дешифруванні: {ex.Message}. Зашифроване: '{fullEncryptedMessage.Substring(0, Math.Min(fullEncryptedMessage.Length, 100))}'...");
-                        }
-                        catch (Exception ex_inner_loop)
-                        {
-                            Debug.WriteLine($"Клієнт ({_clientNickname}): Неочікувана помилка при обробці повідомлення: {ex_inner_loop.Message}. Повідомлення пропущено.");
+                            Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка обробки одного повідомлення: {ex_inner_loop.GetType().Name} - {ex_inner_loop.Message}. Зашифроване: '{fullEncryptedMessage.Substring(0, Math.Min(fullEncryptedMessage.Length, 100))}'... Розшифроване (спроба): '{TryDecrypt(fullEncryptedMessage)}'");
                         }
                     }
                 }
             }
             catch (Exception ex_outer_receive_loop)
             {
-                Debug.WriteLine($"Клієнт ({_clientNickname}): Зовнішня помилка в циклі отримання ReceiveAsync: {ex_outer_receive_loop.Message}\nСТЕК: {ex_outer_receive_loop.StackTrace}");
-                throw;
+                Debug.WriteLine($"Клієнт ({_clientNickname}): Неочікувана зовнішня помилка в ReceiveAsync: {ex_outer_receive_loop.Message}\nСТЕК: {ex_outer_receive_loop.StackTrace}");
+                throw; // Перекидаємо, щоб зловив ContinueWith
             }
             finally
             {
-                // Debug.WriteLine($"Клієнт ({_clientNickname}): Блок finally в ReceiveAsync. Поточний стан IsConnected: {IsConnected}");
-                if (IsConnected)
-                {
-                    Debug.WriteLine($"Клієнт ({_clientNickname}): Цикл отримання завершено, але IsConnected=true. Виклик SafeDisconnectAsync з finally.");
-                    await SafeDisconnectAsync();
-                }
-                else
-                {
-                    ConnectionStatusChanged?.Invoke(false); // Щоб UI знав, що відключено
-                }
-                Debug.WriteLine($"Клієнт ({_clientNickname}): Роботу ReceiveAsync завершено.");
+                Debug.WriteLine($"Клієнт ({_clientNickname}): Блок finally в ReceiveAsync. Поточний стан IsConnected: {IsConnected}");
+                // Важливо: SafeDisconnectAsync викличе ConnectionStatusChanged(false)
+                // Якщо ми тут, значить цикл завершився (сокет закрито або помилка читання)
+                await SafeDisconnectAsync();
+                Debug.WriteLine($"Клієнт ({_clientNickname}): Роботу ReceiveAsync завершено, SafeDisconnectAsync викликано.");
             }
         }
-        private string TryDecrypt(string encryptedText) // Допоміжний метод для логування
+
+        private string TryDecrypt(string encryptedText)
         {
             try { return EncryptionHelper.Decrypt(encryptedText); }
-            catch { return "[не вдалося розшифрувати]"; }
+            catch { return "[не вдалося розшифрувати для логу]"; }
         }
 
-        // ... (DisconnectAsync, SafeDisconnectAsync, CloseClientResources - без змін відносно попередньої версії) ...
         public async Task DisconnectAsync()
         {
-            Debug.WriteLine($"Клієнт ({_clientNickname}): ViewModel ініціював відключення. Поточний стан IsConnected: {IsConnected}");
+            Debug.WriteLine($"Клієнт ({_clientNickname}): ViewModel ініціював DisconnectAsync. IsConnected: {IsConnected}");
             if (!IsConnected && _client == null)
             {
-                Debug.WriteLine($"Клієнт ({_clientNickname}): Вже відключено, додаткові дії не потрібні.");
+                Debug.WriteLine($"Клієнт ({_clientNickname}): DisconnectAsync: вже відключено або не було підключено.");
                 ConnectionStatusChanged?.Invoke(false);
                 return;
             }
 
-            if (IsConnected && _stream != null && _stream.CanWrite)
+            bool wasConnected = IsConnected; // Запам'ятовуємо стан
+
+            if (wasConnected && _stream != null && _stream.CanWrite)
             {
                 try
                 {
-                    var disconnectMessage = new ChatMessage
-                    {
-                        Type = MessageType.Disconnect,
-                        Sender = _clientNickname
-                    };
+                    var disconnectMessage = new ChatMessage { Type = MessageType.Disconnect, Sender = _clientNickname };
                     string jsonDisconnectMessage = disconnectMessage.ToJson();
                     string encryptedDisconnectMessage = EncryptionHelper.Encrypt(jsonDisconnectMessage);
                     byte[] disconnectData = Encoding.UTF8.GetBytes(encryptedDisconnectMessage + "\n");
@@ -289,71 +269,49 @@ namespace ChatApp.Client.Services.Networking
                 }
                 catch (Exception ex) when (ex is System.IO.IOException || ex is SocketException || ex is ObjectDisposedException)
                 {
-                    Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка (IO/Socket/Disposed) при надсиланні повідомлення про відключення: {ex.Message}. Ресурси будуть закриті примусово.");
+                    Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка (IO/Socket/Disposed) при надсиланні DisconnectMessage: {ex.Message}.");
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Клієнт ({_clientNickname}): Загальна помилка при надсиланні повідомлення про відключення: {ex.Message}.");
+                    Debug.WriteLine($"Клієнт ({_clientNickname}): Загальна помилка при надсиланні DisconnectMessage: {ex.Message}.");
                 }
             }
-            await CloseClientResources();
+            await CloseClientResources(); // Закриваємо ресурси
         }
 
         private async Task SafeDisconnectAsync()
         {
-            // Debug.WriteLine($"Клієнт ({_clientNickname}): Виклик SafeDisconnectAsync. Поточний стан IsConnected: {IsConnected}");
-            if (!IsConnected && _client == null)
+            // Цей метод має бути максимально безпечним і не кидати виключень
+            if (_client == null && _stream == null) // Якщо вже все закрито
             {
-                //  Debug.WriteLine($"Клієнт ({_clientNickname}): SafeDisconnectAsync: вже відключено.");
-                ConnectionStatusChanged?.Invoke(false);
+                ConnectionStatusChanged?.Invoke(false); // Просто оновити статус
                 return;
             }
+            Debug.WriteLine($"Клієнт ({_clientNickname}): Виклик SafeDisconnectAsync.");
             await CloseClientResources();
         }
 
         private async Task CloseClientResources()
         {
-            // Debug.WriteLine($"Клієнт ({_clientNickname}): Закриття ресурсів клієнта...");
-            if (_client == null && _stream == null)
-            {
-                //  Debug.WriteLine($"Клієнт ({_clientNickname}): Ресурси вже були закриті або не ініціалізовані.");
-                ConnectionStatusChanged?.Invoke(false);
-                return;
-            }
+            // Перевіряємо, чи є що закривати, щоб уникнути ObjectDisposedException, якщо вже закрито
+            bool resourcesWereOpen = (_stream != null || _client != null);
 
             NetworkStream tempStream = _stream;
             TcpClient tempClient = _client;
-
             _stream = null;
             _client = null;
 
-            try
-            {
-                tempStream?.Close();
-                tempStream?.Dispose();
-                // Debug.WriteLine($"Клієнт ({_clientNickname}): Мережевий потік закрито.");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка при закритті мережевого потоку: {ex.Message}");
-            }
+            try { tempStream?.Close(); tempStream?.Dispose(); } catch (Exception ex) { Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка при закритті потоку в CloseClientResources: {ex.Message}"); }
+            try { tempClient?.Close(); tempClient?.Dispose(); } catch (Exception ex) { Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка при закритті клієнта в CloseClientResources: {ex.Message}"); }
 
-            try
+            if (resourcesWereOpen) // Викликаємо ConnectionStatusChanged тільки якщо ресурси дійсно були відкриті і ми їх зараз закрили
             {
-                tempClient?.Close();
-                tempClient?.Dispose();
-                // Debug.WriteLine($"Клієнт ({_clientNickname}): TCP клієнт закрито.");
+                Debug.WriteLine($"Клієнт ({_clientNickname}): Ресурси закрито в CloseClientResources, викликаємо ConnectionStatusChanged(false).");
+                ConnectionStatusChanged?.Invoke(false);
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Клієнт ({_clientNickname}): Помилка при закритті TCP клієнта: {ex.Message}");
-            }
-
-            ConnectionStatusChanged?.Invoke(false);
-            Debug.WriteLine($"Клієнт ({_clientNickname}): Ресурси клієнта закрито, статус оновлено на 'відключено'.");
         }
 
-        [Obsolete("Використовуйте DisconnectAsync або SafeDisconnectAsync безпосередньо.")]
+        [Obsolete("Використовуйте DisconnectAsync або SafeDisconnectAsync.")]
         public void Disconnect()
         {
             Debug.WriteLine($"Клієнт ({_clientNickname}): Застарілий метод Disconnect() викликано. Перенаправлення на DisconnectAsync.");

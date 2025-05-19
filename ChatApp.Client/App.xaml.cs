@@ -1,39 +1,31 @@
-﻿using System.Windows;
-using System.Windows.Threading; // Потрібно для DispatcherUnhandledExceptionEventArgs
+﻿// App.xaml.cs
+using System.Windows;
+using System.Windows.Threading;
 
 namespace ChatApp.Client
 {
-    /// <summary>
-    /// Interaction logic for App.xaml
-    /// </summary>
     public partial class App : Application
     {
-        // Конструктор App
         public App()
         {
-            // Підписуємося на подію необроблених виключень Dispatcher
             this.DispatcherUnhandledException += App_DispatcherUnhandledException;
         }
 
         void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
-            // Логуємо помилку або показуємо її користувачеві
-            // Це допоможе зрозуміти, чому клієнт "падає"
             string errorMessage = $"Сталася необроблена помилка в клієнті:\n\n" +
+                                  $"Тип: {e.Exception.GetType().Name}\n" + // Додамо тип виключення
                                   $"Повідомлення: {e.Exception.Message}\n\n" +
                                   $"Стек виклику:\n{e.Exception.StackTrace}";
-
-            // Можна використовувати System.Diagnostics.Debug.WriteLine(errorMessage); для виводу в Output вікно Visual Studio
-            // Або показати MessageBox
+            if (e.Exception.InnerException != null)
+            {
+                errorMessage += $"\n\nВнутрішнє виключення:\nТип: {e.Exception.InnerException.GetType().Name}\n" +
+                                $"Повідомлення: {e.Exception.InnerException.Message}\n\n" +
+                                $"Стек виклику внутрішнього виключення:\n{e.Exception.InnerException.StackTrace}";
+            }
             MessageBox.Show(errorMessage, "Критична помилка клієнта", MessageBoxButton.OK, MessageBoxImage.Error);
-
-            // Позначити помилку як оброблену, щоб стандартний обробник .NET не завершив програму аварійно.
-            // Якщо ви хочете, щоб програма все одно закрилася після показу помилки,
-            // можна закоментувати e.Handled = true; або викликати Application.Current.Shutdown();
-            e.Handled = true;
-
-            // За бажанням, можна примусово закрити програму після критичної помилки
-            // Application.Current.Shutdown();
+            e.Handled = true; // Щоб програма не закрилася одразу, і ти встиг прочитати помилку
+            // Application.Current.Shutdown(); // Якщо потрібно закрити програму після помилки
         }
     }
 }
