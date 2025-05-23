@@ -55,8 +55,9 @@ namespace ChatApp.Client.ViewModels
                 if (_messageToSend == value) return;
                 _messageToSend = value;
                 OnPropertyChanged();
-                // ТИМЧАСОВО: Закоментовано для діагностики StackOverflow
-                // ((RelayCommand)SendCommand).RaiseCanExecuteChanged();
+                // НЕ викликаємо RaiseCanExecuteChanged для SendCommand тут,
+                // щоб уникнути потенційної рекурсії при кожному введенні символу.
+                // Стан команди оновиться при зміні IsConnected або після SendMessageAsync.
             }
         }
 
@@ -76,12 +77,7 @@ namespace ChatApp.Client.ViewModels
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(ConnectionStatusColor));
                 UpdateConnectionStatusText();
-
-                // ТИМЧАСОВО: Оновлюємо тільки необхідні команди
-                ((RelayCommand)ConnectCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)DisconnectCommand).RaiseCanExecuteChanged();
-                ((RelayCommand)SendCommand).RaiseCanExecuteChanged(); // Важливо для кнопки Send
-                ((RelayCommand)SendFileCommand).RaiseCanExecuteChanged();
+                RefreshAllCommandsCanExecuteState(); // Оновлюємо всі команди при зміні статусу підключення
             }
         }
 
@@ -93,14 +89,15 @@ namespace ChatApp.Client.ViewModels
                 if (_nickname == value) return;
                 _nickname = value;
                 OnPropertyChanged();
-                ((RelayCommand)ConnectCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)ConnectCommand).RaiseCanExecuteChanged(); // Тільки ConnectCommand залежить від Nickname
                 UpdateConnectionStatusText();
             }
         }
 
         public Brush ConnectionStatusColor => IsConnected ? Brushes.Green : Brushes.Red;
-        public double FileTransferProgress { get => _fileTransferProgress; set { /* ... */ } } // Скорочено для прикладу
-        public bool IsFileTransferring { get => _isFileTransferring; set { /* ... */ } } // Скорочено для прикладу
+        public double FileTransferProgress { get => _fileTransferProgress; set { /* ... (код як раніше) ... */ } }
+        public bool IsFileTransferring { get => _isFileTransferring; set { /* ... (код як раніше, з RaiseCanExecuteChanged для SendFileCommand) ... */ } }
+
 
         public ICommand ConnectCommand { get; }
         public ICommand SendCommand { get; }
@@ -117,32 +114,43 @@ namespace ChatApp.Client.ViewModels
             _tcpClientService.ConnectionStatusChanged += OnConnectionStatusChanged;
             _tcpClientService.UserListReceived += OnUserListReceived;
 
-            ConnectCommand = new RelayCommand(async (o) => await ConnectToServerAsync(), (o) => !IsConnected && !string.IsNullOrWhiteSpace(Nickname));
-            SendCommand = new RelayCommand(async (o) => await SendMessageAsync(), (o) => IsConnected && !string.IsNullOrWhiteSpace(MessageToSend)); // CanExecute залишається
-            DisconnectCommand = new RelayCommand(async (o) => await DisconnectFromServerAsync(), (o) => IsConnected);
-            SendFileCommand = new RelayCommand(async (o) => await SendFileAsync(), (o) => IsConnected && !IsFileTransferring);
+            ConnectCommand = new RelayCommand(async (o) => await ConnectToServerAsync(),
+                (o) => !IsConnected && !string.IsNullOrWhiteSpace(Nickname));
+            SendCommand = new RelayCommand(async (o) => await SendMessageAsync(),
+                (o) => IsConnected && !string.IsNullOrWhiteSpace(MessageToSend)); // CanExecute все ще залежить від MessageToSend
+            DisconnectCommand = new RelayCommand(async (o) => await DisconnectFromServerAsync(),
+                (o) => IsConnected);
+            SendFileCommand = new RelayCommand(async (o) => await SendFileAsync(),
+                (o) => IsConnected && !IsFileTransferring);
 
             UpdateConnectionStatusText();
         }
 
-        private void UpdateConnectionStatusText()
+        private void RefreshAllCommandsCanExecuteState()
         {
-            ConnectionStatus = IsConnected ? $"Підключено як {Nickname}" : "Не підключено";
+            Debug.WriteLine("[VM.RefreshAllCommandsCanExecuteState] Оновлення стану всіх команд...");
+            System.Windows.Application.Current?.Dispatcher?.Invoke(() => {
+                ((RelayCommand)ConnectCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)SendCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)DisconnectCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)SendFileCommand).RaiseCanExecuteChanged();
+            });
         }
+
+        private void UpdateConnectionStatusText()
+        { ConnectionStatus = IsConnected ? $"Підключено як {Nickname}" : "Не підключено"; }
 
         private void SetConnectionState(bool newIsConnectedStatus)
         {
-            if (_isConnected == newIsConnectedStatus) return;
+            if (_isConnected == newIsConnectedStatus) { UpdateConnectionStatusText(); return; }
             IsConnected = newIsConnectedStatus;
-
-            if (!newIsConnectedStatus)
-            { OnlineUsers.Clear(); AddSystemMessageToChat("З'єднання з сервером розірвано або не встановлено."); }
-            else { AddSystemMessageToChat("Успішно підключено до сервера!"); }
+            if (!newIsConnectedStatus) { OnlineUsers.Clear(); AddSystemMessageToChat("З'єднання з сервером розірвано."); }
+            else { AddSystemMessageToChat("Успішно підключено!"); }
         }
 
         private async Task ConnectToServerAsync()
         {
-            if (string.IsNullOrWhiteSpace(Nickname)) { AddSystemMessageToChat("Будь ласка, введіть нікнейм."); return; }
+            if (!((RelayCommand)ConnectCommand).CanExecute(null)) { if (string.IsNullOrWhiteSpace(Nickname)) AddSystemMessageToChat("Будь ласка, введіть нікнейм."); return; }
             string connectingStatus = $"Підключення до {_serverIp}:{_serverPort} як {Nickname}...";
             System.Windows.Application.Current.Dispatcher.Invoke(() => { if (ConnectionStatus != connectingStatus) ConnectionStatus = connectingStatus; });
             ChatMessages.Clear(); OnlineUsers.Clear();
@@ -151,68 +159,74 @@ namespace ChatApp.Client.ViewModels
 
         private async Task SendMessageAsync()
         {
-            Debug.WriteLine("[ViewModel.SendMessageAsync] Початок");
-            var messageToActuallySend = MessageToSend?.Trim(); // Додамо ?. для безпеки
+            // Перевіряємо CanExecute на початку
+            if (!((RelayCommand)SendCommand).CanExecute(null))
+            {
+                Debug.WriteLine("[VM.SendMessageAsync] SendCommand.CanExecute = false. Вихід.");
+                return;
+            }
 
-            // Очищуємо поле ДО надсилання, але RaiseCanExecuteChanged НЕ викликається з сеттера MessageToSend
+            var messageToActuallySend = MessageToSend?.Trim(); // ?. для безпеки, хоча CanExecute вже перевірив
+
+            // Очищуємо поле MessageToSend. Це викличе OnPropertyChanged для MessageToSend,
+            // але НЕ викличе RaiseCanExecuteChanged для SendCommand з сеттера.
             MessageToSend = string.Empty;
 
             if (string.IsNullOrWhiteSpace(messageToActuallySend))
             {
-                Debug.WriteLine("[ViewModel.SendMessageAsync] Повідомлення порожнє, вихід.");
-                // Оновлюємо стан кнопки SendCommand тут, оскільки він міг змінитися через очищення MessageToSend
+                Debug.WriteLine("[VM.SendMessageAsync] Повідомлення порожнє після Trim, вихід.");
+                // Явно оновлюємо стан кнопки SendCommand тут, оскільки MessageToSend змінився.
                 ((RelayCommand)SendCommand).RaiseCanExecuteChanged();
                 return;
             }
 
             try
             {
-                Debug.WriteLine($"[ViewModel.SendMessageAsync] Надсилання: '{messageToActuallySend}'");
                 await _tcpClientService.SendMessageAsync(messageToActuallySend);
-                Debug.WriteLine($"[ViewModel.SendMessageAsync] Повідомлення надіслано, додавання до ChatMessages.");
                 ChatMessages.Add(new Message { Text = $"Ви: {messageToActuallySend}", Timestamp = DateTime.Now, Sender = Nickname, IsOwnMessage = true });
-                Debug.WriteLine($"[ViewModel.SendMessageAsync] Повідомлення додано до ChatMessages.");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[ViewModel.SendMessageAsync] ПОМИЛКА: {ex.Message}");
                 AddSystemMessageToChat($"Помилка надсилання: {ex.Message}");
             }
             finally
             {
-                // Оновлюємо стан кнопки SendCommand ПІСЛЯ всіх операцій
+                // Оновлюємо стан кнопки SendCommand після всіх операцій
                 ((RelayCommand)SendCommand).RaiseCanExecuteChanged();
-                Debug.WriteLine("[ViewModel.SendMessageAsync] Кінець, SendCommand.RaiseCanExecuteChanged викликано.");
             }
         }
 
-        public async Task SendFileAsync() { /* ... код SendFileAsync без змін, що викликають рекурсію ... */ await Task.CompletedTask; }
+        public async Task SendFileAsync() { /* ... код SendFileAsync як у попередній повній версії ... */ await Task.CompletedTask; }
         private async Task DisconnectFromServerAsync() { await _tcpClientService.DisconnectAsync(); }
         private void OnMessageReceived(ChatMessage receivedObject) { Task.Run(async () => await OnMessageReceivedAsync(receivedObject)); }
-        private async Task OnMessageReceivedAsync(ChatMessage receivedObject) { /* ... код обробки як раніше ... */ await Task.CompletedTask; }
-
-        private void OnConnectionStatusChanged(bool newIsConnectedStatus)
-        {
-            Debug.WriteLine($"[ViewModel] OnConnectionStatusChanged викликано з: {newIsConnectedStatus}. Поточний IsConnected (поле): {_isConnected}");
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                SetConnectionState(newIsConnectedStatus);
-            });
-        }
-        private void OnUserListReceived(List<string> users) { /* ... як раніше ... */ }
-        private void AddSystemMessageToChat(string text) { /* ... як раніше ... */ }
-        private string FormatFileSize(long bytes) { /* ... як раніше ... */ return string.Empty; }
+        private async Task OnMessageReceivedAsync(ChatMessage receivedObject) { /* ... код обробки як у попередній повній версії ... */ await Task.CompletedTask; }
+        private void OnConnectionStatusChanged(bool newIsConnectedStatus) { System.Windows.Application.Current.Dispatcher.Invoke(() => { SetConnectionState(newIsConnectedStatus); }); }
+        private void OnUserListReceived(List<string> users) { System.Windows.Application.Current.Dispatcher.Invoke(() => { OnlineUsers.Clear(); if (users != null) { foreach (var user in users) { if (!string.IsNullOrWhiteSpace(user)) OnlineUsers.Add(user); } } }); }
+        private void AddSystemMessageToChat(string text) { System.Windows.Application.Current.Dispatcher.InvokeAsync(() => { ChatMessages.Add(new Message { Text = text, Timestamp = DateTime.Now, Sender = "System", IsSystemMessage = true }); }); }
+        private string FormatFileSize(long bytes) { /* ... */ return string.Empty; }
 
         public event PropertyChangedEventHandler PropertyChanged;
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
-        private class FileReceptionState { /* ... як раніше ... */ }
+        private class FileReceptionState
+        { /* ... як у попередній повній версії, з виправленням ініціалізації _chunks ... */
+            public string FileName { get; }
+            public long FileSize { get; }
+            public string MimeType { get; }
+            public int TotalChunks { get; }
+            private readonly List<byte[]> _chunks; private int _receivedChunksCount; private readonly object _lock = new object();
+            public FileReceptionState(string fileName, long fileSize, string mimeType, int totalChunks) { FileName = fileName; FileSize = fileSize; MimeType = mimeType; TotalChunks = totalChunks > 0 ? totalChunks : 1; _chunks = new List<byte[]>(new byte[TotalChunks][]); _receivedChunksCount = 0; }
+            public void AddChunk(int index, byte[] data) { lock (_lock) { if (index >= 0 && index < TotalChunks) { if (_chunks[index] == null) { _chunks[index] = data; _receivedChunksCount++; } } } }
+            public bool IsComplete() { lock (_lock) { return _receivedChunksCount == TotalChunks && _chunks.All(c => c != null); } }
+            public byte[] GetAssembledFile() { lock (_lock) { List<byte> assembledBytes = new List<byte>(); if (!IsComplete()) { for (int i = 0; i < TotalChunks; i++) { if (i < _chunks.Count && _chunks[i] != null) assembledBytes.AddRange(_chunks[i]); } return assembledBytes.ToArray(); } using (var ms = new MemoryStream(FileSize > 0 ? (int)FileSize : 1024)) { for (int i = 0; i < TotalChunks; i++) { if (i < _chunks.Count && _chunks[i] != null) ms.Write(_chunks[i], 0, _chunks[i].Length); } return ms.ToArray(); } } }
+            public double GetReceptionProgress() { lock (_lock) { return TotalChunks == 0 ? 100.0 : ((double)_receivedChunksCount / TotalChunks * 100.0); } }
+        }
     }
 
     public class RelayCommand : ICommand
-    { /* ... як раніше ... */
+    { /* ... як у попередній повній версії ... */
         private readonly Func<object, Task> _executeAsync; private readonly Action<object> _executeSync; private readonly Predicate<object> _canExecute; private readonly bool _isAsync;
         public RelayCommand(Action<object> execute, Predicate<object> canExecute = null) { _executeSync = execute ?? throw new ArgumentNullException(nameof(execute)); _canExecute = canExecute; _isAsync = false; }
         public RelayCommand(Func<object, Task> executeAsync, Predicate<object> canExecute = null) { _executeAsync = executeAsync ?? throw new ArgumentNullException(nameof(executeAsync)); _canExecute = canExecute; _isAsync = true; }

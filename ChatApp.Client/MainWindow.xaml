@@ -6,10 +6,10 @@
         xmlns:vm="clr-namespace:ChatApp.Client.ViewModels" 
         xmlns:models="clr-namespace:ChatApp.Client.Models"
         xmlns:views="clr-namespace:ChatApp.Client.Views" 
-        xmlns:conv="clr-namespace:ChatApp.Client.Converters" mc:Ignorable="d"
-        Title="ChatApp Client" Height="600" Width="800"
+        xmlns:conv="clr-namespace:ChatApp.Client.Converters" 
+        mc:Ignorable="d"
+        Title="ChatApp Client - Dark Theme" Height="600" Width="850"
         WindowStartupLocation="CenterScreen">
-
     <Window.DataContext>
         <vm:MainWindowViewModel/>
     </Window.DataContext>
@@ -19,21 +19,101 @@
             <conv:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
             <conv:StringToBooleanConverterForNullOrEmpty x:Key="StringToBooleanConverterForNullOrEmpty"/>
 
+            <Color x:Key="WindowBackgroundColor">#FF2D2D30</Color>
+            <Color x:Key="ContentBackgroundColor">#FF1E1E1E</Color>
+            <Color x:Key="ControlBackgroundColor">#FF3C3C3C</Color>
+            <Color x:Key="ControlHoverBackgroundColor">#FF505050</Color>
+            <Color x:Key="ControlBorderColor">#FF555555</Color>
+            <Color x:Key="PrimaryForegroundColor">#FFDADADA</Color>
+            <Color x:Key="SecondaryForegroundColor">#FF9E9E9E</Color>
+            <Color x:Key="AccentColor">#FF007ACC</Color>
+            <Color x:Key="HyperlinkForegroundColor">#FF6EBFF2</Color>
+            <Color x:Key="OwnMessageBackgroundColor">#FF004C8C</Color>
+            <Color x:Key="OtherMessageBackgroundColor">#FF3C3C3C</Color>
+            <Color x:Key="DarkestBackgroundColor">#FF101010</Color>
+            <Color x:Key="LighterDarkBackgroundColor">#FF2D2D30</Color>
+
+            <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{StaticResource WindowBackgroundColor}"/>
+            <SolidColorBrush x:Key="ContentBackgroundBrush" Color="{StaticResource ContentBackgroundColor}"/>
+            <SolidColorBrush x:Key="ControlBackgroundBrush" Color="{StaticResource ControlBackgroundColor}"/>
+            <SolidColorBrush x:Key="ControlHoverBackgroundBrush" Color="{StaticResource ControlHoverBackgroundColor}"/>
+            <SolidColorBrush x:Key="ControlBorderBrush" Color="{StaticResource ControlBorderColor}"/>
+            <SolidColorBrush x:Key="PrimaryForegroundBrush" Color="{StaticResource PrimaryForegroundColor}"/>
+            <SolidColorBrush x:Key="SecondaryForegroundBrush" Color="{StaticResource SecondaryForegroundColor}"/>
+            <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+            <SolidColorBrush x:Key="HyperlinkForegroundBrush" Color="{StaticResource HyperlinkForegroundColor}"/>
+            <SolidColorBrush x:Key="OwnMessageBackgroundBrush" Color="{StaticResource OwnMessageBackgroundColor}"/>
+            <SolidColorBrush x:Key="OtherMessageBackgroundBrush" Color="{StaticResource OtherMessageBackgroundColor}"/>
+            <SolidColorBrush x:Key="DarkestBackgroundBrush" Color="{StaticResource DarkestBackgroundColor}"/>
+            <SolidColorBrush x:Key="LighterDarkBackgroundBrush" Color="{StaticResource LighterDarkBackgroundColor}"/>
+
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource PrimaryForegroundBrush}"/>
+            </Style>
             <Style TargetType="Button">
                 <Setter Property="Padding" Value="10,5"/>
                 <Setter Property="Margin" Value="5"/>
+                <Setter Property="Background" Value="{StaticResource ControlBackgroundBrush}"/>
+                <Setter Property="Foreground" Value="{StaticResource PrimaryForegroundBrush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource ControlBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{StaticResource ControlHoverBackgroundBrush}"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Opacity" Value="0.5"/>
+                    </Trigger>
+                </Style.Triggers>
             </Style>
             <Style TargetType="TextBox">
                 <Setter Property="Padding" Value="5"/>
                 <Setter Property="Margin" Value="5"/>
+                <Setter Property="Background" Value="#FF252525"/>
+                <Setter Property="Foreground" Value="{StaticResource PrimaryForegroundBrush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource ControlBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CaretBrush" Value="{StaticResource PrimaryForegroundBrush}"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+            </Style>
+            <Style TargetType="ProgressBar">
+                <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                <Setter Property="Background" Value="{StaticResource ControlBackgroundBrush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource ControlBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
             </Style>
             <Style TargetType="ItemsControl">
                 <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             </Style>
+            <Style TargetType="ListBox">
+                <Setter Property="Background" Value="{StaticResource ContentBackgroundBrush}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource ControlBorderBrush}"/>
+            </Style>
+            <Style TargetType="ScrollViewer">
+                <Setter Property="Background" Value="Transparent"/>
+            </Style>
+            <Style TargetType="Border" x:Key="ContentAreaBorder">
+                <Setter Property="BorderBrush" Value="{StaticResource ControlBorderBrush}"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="Background" Value="{StaticResource ContentBackgroundBrush}"/>
+                <Setter Property="CornerRadius" Value="3"/>
+            </Style>
+            <Style TargetType="GridSplitter">
+                <Setter Property="Background" Value="{StaticResource ControlBorderBrush}"/>
+                <Setter Property="Width" Value="5"/>
+                <Setter Property="HorizontalAlignment" Value="Center"/>
+                <Setter Property="VerticalAlignment" Value="Stretch"/>
+            </Style>
         </ResourceDictionary>
     </Window.Resources>
 
-    <Grid Margin="10">
+    <Grid Margin="10" Background="{StaticResource WindowBackgroundBrush}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="19*"/>
+            <ColumnDefinition Width="147*"/>
+        </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -41,85 +121,80 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-            <TextBlock Text="Нікнейм:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-            <TextBox Text="{Binding Nickname, UpdateSourceTrigger=PropertyChanged}" Width="120" 
-                     IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
-            <TextBlock Text="IP Сервера:" VerticalAlignment="Center" Margin="10,0,5,0"/>
-            <TextBox Text="{Binding ServerIp, UpdateSourceTrigger=PropertyChanged}" Width="100" 
-                     IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
-            <TextBlock Text="Порт:" VerticalAlignment="Center" Margin="10,0,5,0"/>
-            <TextBox Text="{Binding ServerPort, UpdateSourceTrigger=PropertyChanged}" Width="60" 
-                     IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
-            <Button Content="Підключитися" Command="{Binding ConnectCommand}"/>
-            <Button Content="Відключитися" Command="{Binding DisconnectCommand}"/>
-        </StackPanel>
+        <Border Grid.Row="0" Padding="5" Margin="0,0,0,10" Background="{StaticResource LighterDarkBackgroundBrush}" CornerRadius="3" Grid.ColumnSpan="2">
+            <StackPanel Orientation="Horizontal" >
+                <TextBlock Text="Нікнейм:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                <TextBox Text="{Binding Nickname, UpdateSourceTrigger=PropertyChanged}" Width="120" 
+                         IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
+                <TextBlock Text="IP Сервера:" VerticalAlignment="Center" Margin="10,0,5,0"/>
+                <TextBox Text="{Binding ServerIp, UpdateSourceTrigger=PropertyChanged}" Width="100" 
+                         IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
+                <TextBlock Text="Порт:" VerticalAlignment="Center" Margin="10,0,5,0"/>
+                <TextBox Text="{Binding ServerPort, UpdateSourceTrigger=PropertyChanged}" Width="60" 
+                         IsEnabled="{Binding IsConnected, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
+                <Button Content="Підключитися" Command="{Binding ConnectCommand}"/>
+                <Button Content="Відключитися" Command="{Binding DisconnectCommand}"/>
+            </StackPanel>
+        </Border>
 
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="1" Grid.ColumnSpan="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="200"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" BorderBrush="LightGray" BorderThickness="1">
-                <ScrollViewer x:Name="ChatScrollViewer" VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding ChatMessages}" Margin="5">
+            <Border Grid.Column="0" Style="{StaticResource ContentAreaBorder}">
+                <ScrollViewer x:Name="ChatScrollViewer" VerticalScrollBarVisibility="Auto" Padding="5">
+                    <ItemsControl ItemsSource="{Binding ChatMessages}" Margin="0">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type models:Message}">
-                                <Border Margin="5" Padding="8" CornerRadius="5" MaxWidth="450">
+                                <Border Margin="5,3" Padding="10,8" CornerRadius="8" MaxWidth="500">
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="Background" Value="LightBlue"/>
+                                            <Setter Property="Background" Value="{StaticResource OtherMessageBackgroundBrush}"/>
                                             <Setter Property="HorizontalAlignment" Value="Left"/>
+                                            <Setter Property="BorderBrush" Value="{StaticResource ControlBorderBrush}"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsOwnMessage}" Value="True">
-                                                    <Setter Property="Background" Value="LightGreen"/>
+                                                    <Setter Property="Background" Value="{StaticResource OwnMessageBackgroundBrush}"/>
                                                     <Setter Property="HorizontalAlignment" Value="Right"/>
+                                                    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding IsSystemMessage}" Value="True">
-                                                    <Setter Property="Background" Value="LightGray"/>
+                                                    <Setter Property="Background" Value="Transparent"/>
                                                     <Setter Property="HorizontalAlignment" Value="Stretch"/>
                                                     <Setter Property="TextElement.FontStyle" Value="Italic"/>
+                                                    <Setter Property="TextElement.Foreground" Value="{StaticResource SecondaryForegroundBrush}"/>
+                                                    <Setter Property="BorderThickness" Value="0"/>
+                                                    <Setter Property="Margin" Value="0,5,0,5"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
                                     <StackPanel>
-                                        <Image Source="{Binding Image}" MaxHeight="200" MaxWidth="300" Stretch="Uniform" Margin="0,0,0,5"
-                                               Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-
-                                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="14"
-                                                   Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
-
-                                        <TextBlock Cursor="Hand" ToolTip="{Binding FilePath}"
-                                                   Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
+                                        <TextBlock Text="{Binding Sender}" FontWeight="Bold" FontSize="13"
+                                                   Visibility="{Binding IsSystemMessage, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
-                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
                                                     <Style.Triggers>
-                                                        <MultiDataTrigger>
-                                                            <MultiDataTrigger.Conditions>
-                                                                <Condition Binding="{Binding IsImage}" Value="False"/>
-                                                                <Condition Binding="{Binding FilePath, Converter={StaticResource StringToBooleanConverterForNullOrEmpty}}" Value="True"/>
-                                                            </MultiDataTrigger.Conditions>
-                                                            <Setter Property="Visibility" Value="Visible"/>
-                                                            <Setter Property="Foreground" Value="DimGray"/>
-                                                            <Setter Property="FontSize" Value="11"/>
-                                                            <Setter Property="FontStyle" Value="Italic"/>
-                                                            <Setter Property="Margin" Value="0,3,0,0"/>
-                                                        </MultiDataTrigger>
+                                                        <DataTrigger Binding="{Binding IsOwnMessage}" Value="True">
+                                                            <Setter Property="Foreground" Value="{StaticResource PrimaryForegroundBrush}"/>
+                                                        </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </TextBlock.Style>
-                                            <Run Text="[Файл: "/>
-                                            <Hyperlink NavigateUri="{Binding FilePath, TargetNullValue=''}" RequestNavigate="Hyperlink_RequestNavigate" Foreground="{Binding RelativeSource={RelativeSource AncestorType=TextBlock}, Path=Foreground}">
-                                                <Run Text="{Binding FileNameFromPath}"/>
-                                            </Hyperlink>
-                                            <Run Text="]"/>
                                         </TextBlock>
 
-                                        <TextBlock Text="{Binding Timestamp, StringFormat='HH:mm:ss'}" FontSize="10" Foreground="DarkSlateGray" HorizontalAlignment="Right" Margin="0,3,0,0">
+                                        <Image Source="{Binding Image}" MaxHeight="200" MaxWidth="300" Stretch="Uniform" Margin="0,5,0,5"
+                                               Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+
+                                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="14" Margin="0,3,0,0"
+                                                   Visibility="{Binding IsImage, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverse}"/>
+
+                                        <TextBlock Text="{Binding Timestamp, StringFormat='HH:mm:ss'}" FontSize="10" Foreground="{StaticResource SecondaryForegroundBrush}" HorizontalAlignment="Right" Margin="0,5,0,0">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
                                                     <Style.Triggers>
@@ -138,15 +213,15 @@
                 </ScrollViewer>
             </Border>
 
-            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="LightGray"/>
+            <GridSplitter Grid.Column="1"/>
 
-            <Border Grid.Column="2" BorderBrush="LightGray" BorderThickness="1" Margin="5,0,0,0">
+            <Border Grid.Column="2" Style="{StaticResource ContentAreaBorder}" Margin="5,0,0,0">
                 <StackPanel>
-                    <TextBlock Text="Онлайн користувачі:" FontWeight="Bold" Margin="5" Padding="5" Background="AliceBlue"/>
-                    <ListBox ItemsSource="{Binding OnlineUsers}" BorderThickness="0">
+                    <TextBlock Text="Онлайн користувачі:" FontWeight="Bold" Margin="5" Padding="5" Background="{StaticResource AccentBrush}" Foreground="White"/>
+                    <ListBox ItemsSource="{Binding OnlineUsers}" BorderThickness="0" Background="Transparent">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding}" Margin="5,2"/>
+                                <TextBlock Text="{Binding}" Margin="5,3" Foreground="{StaticResource PrimaryForegroundBrush}"/>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
@@ -154,19 +229,21 @@
             </Border>
         </Grid>
 
-        <Grid Grid.Row="2" Margin="0,10,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBox x:Name="MessageTextBox" Grid.Column="0" Text="{Binding MessageToSend, UpdateSourceTrigger=PropertyChanged}" 
-                     IsEnabled="{Binding IsConnected}" KeyDown="MessageTextBox_KeyDown" VerticalContentAlignment="Center" MinHeight="30"/>
-            <Button Grid.Column="1" Content="Надіслати" Command="{Binding SendCommand}"/>
-            <Button Grid.Column="2" Content="Надіслати файл" Command="{Binding SendFileCommand}"/>
-        </Grid>
+        <Border Grid.Row="2" Margin="0,10,0,0" Padding="5" Background="{StaticResource LighterDarkBackgroundBrush}" CornerRadius="3" Grid.ColumnSpan="2">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="MessageTextBox" Grid.Column="0" Text="{Binding MessageToSend, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" 
+                         IsEnabled="{Binding IsConnected}" KeyDown="MessageTextBox_KeyDown" MinHeight="30"/>
+                <Button Grid.Column="1" Content="Надіслати" Command="{Binding SendCommand}"/>
+                <Button Grid.Column="2" Content="Надіслати файл" Command="{Binding SendFileCommand}"/>
+            </Grid>
+        </Border>
 
-        <StatusBar Grid.Row="3" Margin="0,5,0,0">
+        <StatusBar Grid.Row="3" Margin="0,5,0,0" Background="{StaticResource DarkestBackgroundBrush}" Grid.ColumnSpan="2">
             <StatusBarItem>
                 <TextBlock Text="{Binding ConnectionStatus}" Foreground="{Binding ConnectionStatusColor}"/>
             </StatusBarItem>

@@ -1,20 +1,24 @@
 ﻿using System;
-using Newtonsoft.Json; // Додайте цей using
+using Newtonsoft.Json;
 
 namespace ChatApp.Common.Models
 {
     public enum MessageType
     {
-        ChatMessage,
-        SystemMessage,
-        UserList,
-        Disconnect,
-        PrivateMessage,
-        FileTransferMetadata, // Новий тип: метадані файлу (початок передачі)
-        FileTransferChunk,    // Новий тип: фрагмент файлу
-        FileTransferEnd,      // Новий тип: кінець передачі файлу
-        FileTransfer,         // <-- ДОДАНО ЦЕЙ ТИП
-        TypingStatus
+        ChatMessage,        // Звичайне текстове повідомлення
+        SystemMessage,      // Системне повідомлення від сервера або клієнта
+        UserList,           // Список користувачів онлайн
+        Disconnect,         // Повідомлення про відключення
+        PrivateMessage,     // Приватне повідомлення (поки не реалізовано)
+
+        FileTransferMetadata, // Метадані файлу (початок "живої" передачі)
+        FileTransferChunk,    // Фрагмент файлу ("жива" передача)
+        FileTransferEnd,      // Кінець "живої" передачі файлу
+
+        HistoricFileMessage, // НОВИЙ ТИП: Повідомлення в історії, що представляє файл
+
+        TypingStatus        // Статус набору тексту (поки не реалізовано)
+        // FileTransfer був зайвим, видаляємо, якщо не використовується для чогось специфічного
     }
 
     public class ChatMessage
@@ -26,17 +30,17 @@ namespace ChatApp.Common.Models
         public string Sender { get; set; }
 
         [JsonProperty("recipient")]
-        public string Recipient { get; set; } // Для приватних повідомлень
+        public string Recipient { get; set; }
 
         [JsonProperty("content")]
-        public string Content { get; set; } // Текст повідомлення або текстові метадані
+        public string Content { get; set; } // Для ChatMessage, SystemMessage. Для HistoricFileMessage може бути порожнім або містити опис.
 
         [JsonProperty("timestamp")]
         public DateTime Timestamp { get; set; }
 
-        // Поля для передачі файлів
-        [JsonProperty("fileId")] // Унікальний ідентифікатор для сесії передачі файлу
-        public Guid FileId { get; set; }
+        // Поля для передачі файлів та для HistoricFileMessage
+        [JsonProperty("fileId")]
+        public Guid FileId { get; set; } // Може бути корисним для HistoricFileMessage для ідентифікації
 
         [JsonProperty("fileName")]
         public string FileName { get; set; }
@@ -45,21 +49,22 @@ namespace ChatApp.Common.Models
         public long FileSize { get; set; }
 
         [JsonProperty("fileMimeType")]
-        public string FileMimeType { get; set; } // Тип файлу (наприклад, "image/jpeg", "application/pdf")
+        public string FileMimeType { get; set; }
 
-        [JsonProperty("chunkIndex")] // Індекс поточного фрагмента
+        // Ці поля більше для "живої" передачі, але можуть бути у HistoricFileMessage, якщо потрібно
+        [JsonProperty("chunkIndex")]
         public int ChunkIndex { get; set; }
 
-        [JsonProperty("totalChunks")] // Загальна кількість фрагментів
+        [JsonProperty("totalChunks")]
         public int TotalChunks { get; set; }
 
-        [JsonProperty("fileData")] // Сам фрагмент файлу (як масив байтів Base64)
+        [JsonProperty("fileData")] // Для "живої" передачі, для HistoricFileMessage буде null
         public string FileData { get; set; }
 
         public ChatMessage()
         {
-            Timestamp = DateTime.Now; // Встановлюємо поточний час за замовчуванням
-            FileId = Guid.Empty; // Ініціалізуємо Guid
+            Timestamp = DateTime.UtcNow; // Встановлюємо UTC час за замовчуванням
+            FileId = Guid.Empty;
         }
 
         public string ToJson()
@@ -69,7 +74,16 @@ namespace ChatApp.Common.Models
 
         public static ChatMessage FromJson(string json)
         {
-            return JsonConvert.DeserializeObject<ChatMessage>(json);
+            try
+            {
+                return JsonConvert.DeserializeObject<ChatMessage>(json);
+            }
+            catch (Exception ex)
+            {
+                // Можна додати логування помилки десеріалізації тут
+                System.Diagnostics.Debug.WriteLine($"Помилка десеріалізації ChatMessage: {ex.Message} | JSON: {json}");
+                return null;
+            }
         }
     }
 }
