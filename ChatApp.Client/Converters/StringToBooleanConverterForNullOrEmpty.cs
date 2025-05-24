@@ -1,13 +1,10 @@
-﻿using System.Globalization;
-using System.Windows.Data;
-
-using System;
+﻿using System; 
 using System.Globalization;
 using System.Windows.Data;
 
-namespace ChatApp.Client.Converters // ВАЖЛИВО: правильний простір імен
+namespace ChatApp.Client.Converters
 {
-    public class StringToBooleanConverterForNullOrEmpty : IValueConverter // ВАЖЛИВО: public class
+    public class StringToBooleanConverterForNullOrEmpty : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {

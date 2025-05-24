@@ -3,9 +3,9 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace ChatApp.Client.Converters // ВАЖЛИВО: правильний простір імен
+namespace ChatApp.Client.Converters
 {
-    public class BooleanToVisibilityConverter : IValueConverter // ВАЖЛИВО: public class
+    public class BooleanToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {

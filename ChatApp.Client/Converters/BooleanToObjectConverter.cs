@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Globalization;
-using System.Windows.Data; // Для IValueConverter
-using System.Windows.Markup; // Для MarkupExtension, якщо потрібно (але тут не використовується)
+using System.Windows.Data;
 
 namespace ChatApp.Client.Converters
 {
@@ -14,16 +13,13 @@ namespace ChatApp.Client.Converters
         {
             if (value is bool boolValue)
             {
-                // Якщо параметр "Accent", то можливо інвертувати логіку або вибрати інші значення
-                // Для простоти, поки що ігноруємо параметр
                 return boolValue ? TrueValue : FalseValue;
             }
-            return FalseValue; // Значення за замовчуванням, якщо вхідне значення не bool
+            return FalseValue;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            // Зазвичай не потрібно для односторонньої конвертації
             throw new NotImplementedException();
         }
     }

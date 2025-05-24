@@ -1,5 +1,4 @@
-﻿// Початок файлу TcpServer.cs
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -32,7 +31,7 @@ namespace ChatApp.Server.Networking
             {
                 _listener = new TcpListener(IPAddress.Any, _port);
                 _listener.Start();
-                Console.WriteLine($"Сервер запущено на порту {_port}. Очікування підключень...");
+                Console.WriteLine($"Server started on port {_port}. Waiting for connections...");
 
                 while (true)
                 {
@@ -43,20 +42,20 @@ namespace ChatApp.Server.Networking
                     {
                         _connectedClients.Add(clientHandler);
                     }
-                    Console.WriteLine($"Сервер: Клієнт підключився: {client.Client.RemoteEndPoint}. Всього клієнтів: {_connectedClients.Count}");
+                    Console.WriteLine($"Server: Client connected: {client.Client.RemoteEndPoint}. Total clients: {_connectedClients.Count}");
 
                     _ = Task.Run(async () => await clientHandler.ProcessClientAsync());
                 }
             }
-            catch (SocketException ex) { Console.WriteLine($"Сервер: Помилка сокету TcpListener: {ex.Message}"); }
-            catch (Exception ex) { Console.WriteLine($"Сервер: Неочікувана помилка TcpListener: {ex.Message}\n{ex.StackTrace}"); }
+            catch (SocketException ex) { Console.WriteLine($"Server: TcpListener socket error: {ex.Message}"); }
+            catch (Exception ex) { Console.WriteLine($"Server: Unexpected TcpListener error: {ex.Message}\n{ex.StackTrace}"); }
             finally { Stop(); }
         }
 
         public void Stop()
         {
             _listener?.Stop();
-            Console.WriteLine("Сервер: Зупинка сервера...");
+            Console.WriteLine("Server: Stopping server...");
             List<ClientHandler> clientsToClose;
             lock (_clientsLock)
             {
@@ -68,15 +67,15 @@ namespace ChatApp.Server.Networking
             {
                 try
                 {
-                    // Можна надіслати повідомлення про закриття сервера, але клієнти, ймовірно, отримають IOException
+                    // It's possible to send a server shutdown message, but clients will likely get an IOException
                     clientHandler.TcpClient?.Close();
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Сервер: Помилка закриття клієнта {clientHandler.Nickname}: {ex.Message}");
+                    Console.WriteLine($"Server: Error closing client {clientHandler.Nickname}: {ex.Message}");
                 }
             }
-            Console.WriteLine("Сервер зупинено.");
+            Console.WriteLine("Server stopped.");
         }
 
         public void RemoveClient(ClientHandler clientHandler)
@@ -91,9 +90,9 @@ namespace ChatApp.Server.Networking
 
             if (removed)
             {
-                string nickname = clientHandler.Nickname ?? "Невідомий";
+                string nickname = clientHandler.Nickname ?? "Unknown";
                 string endpoint = clientHandler.TcpClient?.Client?.RemoteEndPoint?.ToString() ?? "N/A";
-                Console.WriteLine($"Сервер: Клієнта {nickname} ({endpoint}) видалено зі списку. Залишилося клієнтів: {_connectedClients.Count}");
+                Console.WriteLine($"Server: Client {nickname} ({endpoint}) removed from list. Clients remaining: {_connectedClients.Count}");
 
                 if (nickname != "UnknownUser" && !string.IsNullOrWhiteSpace(nickname))
                 {
@@ -101,10 +100,8 @@ namespace ChatApp.Server.Networking
                     {
                         Type = MessageType.SystemMessage,
                         Sender = "Server",
-                        Content = $"[{nickname}] покинув чат."
+                        Content = $"[{nickname}] has left the chat."
                     };
-                    // Транслюємо всім, хто залишився (senderToExclude = null, оскільки clientHandler вже видалений з _connectedClients (якщо не було помилок))
-                    // Або можна передати clientHandler, щоб точно його виключити, якщо він ще там є з якоїсь причини
                     _ = Task.Run(async () => await BroadcastMessageAsync(disconnectNotification, null));
                 }
                 _ = Task.Run(SendUserListAsync);
@@ -122,7 +119,7 @@ namespace ChatApp.Server.Networking
             string jsonMessage = chatMessage.ToJson();
             if (jsonMessage == null)
             {
-                Console.WriteLine($"Сервер: Помилка серіалізації повідомлення типу {chatMessage.Type} від {chatMessage.Sender} в JSON (null). Трансляція скасована.");
+                Console.WriteLine($"Server: Error serializing message type {chatMessage.Type} from {chatMessage.Sender} to JSON (null). Broadcast cancelled.");
                 return;
             }
             string encryptedMessage = EncryptionHelper.Encrypt(jsonMessage);
@@ -134,7 +131,7 @@ namespace ChatApp.Server.Networking
                 currentClientsSnapshot = _connectedClients.ToList();
             }
 
-            //Console.WriteLine($"Сервер: Трансляція повідомлення типу {chatMessage.Type} від {chatMessage.Sender} для {currentClientsSnapshot.Count} клієнтів (виключаючи: {senderToExclude?.Nickname})");
+            // Console.WriteLine($"Server: Broadcasting message type {chatMessage.Type} from {chatMessage.Sender} to {currentClientsSnapshot.Count} clients (excluding: {senderToExclude?.Nickname})");
 
             foreach (var clientHandler in currentClientsSnapshot)
             {
@@ -151,13 +148,13 @@ namespace ChatApp.Server.Networking
                     }
                     catch (Exception ex) when (ex is IOException || ex is ObjectDisposedException)
                     {
-                        Console.WriteLine($"Сервер: Помилка IO/Disposed при надсиланні повідомлення клієнту {clientHandler.Nickname} ({clientHandler.TcpClient?.Client?.RemoteEndPoint}): {ex.Message}. Можливо, клієнт відключився.");
-                        // Розглянути можливість видалення цього клієнта тут, але обережно з модифікацією колекції під час ітерації
-                        // Можна створити список для видалення і видалити їх після циклу
+                        Console.WriteLine($"Server: IO/Disposed error sending message to client {clientHandler.Nickname} ({clientHandler.TcpClient?.Client?.RemoteEndPoint}): {ex.Message}. Client may have disconnected.");
+                        // Consider removing this client here, but be careful with modifying the collection during iteration.
+                        // Could create a list for removal and remove them after the loop.
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Сервер: Загальна помилка надсилання повідомлення клієнту {clientHandler.Nickname} ({clientHandler.TcpClient?.Client?.RemoteEndPoint}): {ex.Message}");
+                        Console.WriteLine($"Server: General error sending message to client {clientHandler.Nickname} ({clientHandler.TcpClient?.Client?.RemoteEndPoint}): {ex.Message}");
                     }
                 }
             }
@@ -175,7 +172,7 @@ namespace ChatApp.Server.Networking
                     .ToList();
             }
 
-            Console.WriteLine($"Сервер: Надсилання списку користувачів: [{string.Join(", ", userNames)}] для {_connectedClients.Count(c => c.TcpClient.Connected)} активних клієнтів.");
+            Console.WriteLine($"Server: Sending user list: [{string.Join(", ", userNames)}] for {_connectedClients.Count(c => c.TcpClient.Connected)} active clients.");
             string userListJson = string.Join(",", userNames);
             var userListMessage = new ChatMessage
             {

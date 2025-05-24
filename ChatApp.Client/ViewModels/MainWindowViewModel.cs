@@ -9,12 +9,12 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging; // Додано для BitmapImage
+using System.Windows.Media.Imaging;
 using ChatApp.Client.Models;
 using ChatApp.Client.Services.Networking;
 using ChatApp.Common.Models;
-using Microsoft.Win32; // Для OpenFileDialog
-using MimeMapping; // Переконайтеся, що цей using є і бібліотека підключена
+using Microsoft.Win32;
+using MimeMapping;
 
 namespace ChatApp.Client.ViewModels
 {
@@ -150,7 +150,7 @@ namespace ChatApp.Client.ViewModels
 
         private void RefreshAllCommandsCanExecuteState()
         {
-            Debug.WriteLine("[VM.RefreshAllCommandsCanExecuteState] Оновлення стану всіх команд...");
+            Debug.WriteLine("[VM.RefreshAllCommandsCanExecuteState] Refreshing state of all commands...");
             System.Windows.Application.Current?.Dispatcher?.Invoke(() => {
                 ((RelayCommand)ConnectCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)SendCommand).RaiseCanExecuteChanged();
@@ -160,7 +160,7 @@ namespace ChatApp.Client.ViewModels
         }
 
         private void UpdateConnectionStatusText()
-        { ConnectionStatus = IsConnected ? $"Підключено як {Nickname}" : "Не підключено"; }
+        { ConnectionStatus = IsConnected ? $"Connected as {Nickname}" : "Not connected"; }
 
         private void SetConnectionState(bool newIsConnectedStatus)
         {
@@ -170,18 +170,18 @@ namespace ChatApp.Client.ViewModels
             if (previousIsConnected && !newIsConnectedStatus)
             {
                 OnlineUsers.Clear();
-                AddSystemMessageToChat("З'єднання з сервером розірвано.");
+                AddSystemMessageToChat("Connection to server lost.");
             }
             else if (!previousIsConnected && newIsConnectedStatus)
             {
-                AddSystemMessageToChat("Успішно підключено!");
+                AddSystemMessageToChat("Successfully connected!");
             }
         }
 
         private async Task ConnectToServerAsync()
         {
-            if (!((RelayCommand)ConnectCommand).CanExecute(null)) { if (string.IsNullOrWhiteSpace(Nickname)) AddSystemMessageToChat("Будь ласка, введіть нікнейм."); return; }
-            string connectingStatus = $"Підключення до {_serverIp}:{_serverPort} як {Nickname}...";
+            if (!((RelayCommand)ConnectCommand).CanExecute(null)) { if (string.IsNullOrWhiteSpace(Nickname)) AddSystemMessageToChat("Please enter a nickname."); return; }
+            string connectingStatus = $"Connecting to {_serverIp}:{_serverPort} as {Nickname}...";
             System.Windows.Application.Current.Dispatcher.Invoke(() => { if (ConnectionStatus != connectingStatus) ConnectionStatus = connectingStatus; });
             ChatMessages.Clear(); OnlineUsers.Clear();
             AddSystemMessageToChat(connectingStatus);
@@ -192,7 +192,7 @@ namespace ChatApp.Client.ViewModels
         {
             if (!((RelayCommand)SendCommand).CanExecute(null))
             {
-                Debug.WriteLine("[VM.SendMessageAsync] SendCommand.CanExecute = false. Вихід.");
+                Debug.WriteLine("[VM.SendMessageAsync] SendCommand.CanExecute = false. Exiting.");
                 return;
             }
 
@@ -201,18 +201,18 @@ namespace ChatApp.Client.ViewModels
 
             if (string.IsNullOrWhiteSpace(messageToActuallySend))
             {
-                Debug.WriteLine("[VM.SendMessageAsync] Повідомлення порожнє після Trim, вихід.");
+                Debug.WriteLine("[VM.SendMessageAsync] Message is empty after Trim, exiting.");
                 return;
             }
 
             try
             {
-                ChatMessages.Add(new Message { Text = $"Ви: {messageToActuallySend}", Timestamp = DateTime.Now, Sender = Nickname, IsOwnMessage = true });
+                ChatMessages.Add(new Message { Text = $"You: {messageToActuallySend}", Timestamp = DateTime.Now, Sender = Nickname, IsOwnMessage = true });
                 await _tcpClientService.SendMessageAsync(messageToActuallySend);
             }
             catch (Exception ex)
             {
-                AddSystemMessageToChat($"Помилка надсилання: {ex.Message}");
+                AddSystemMessageToChat($"Error sending message: {ex.Message}");
             }
         }
 
@@ -227,7 +227,7 @@ namespace ChatApp.Client.ViewModels
         {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
             {
-                Debug.WriteLine($"[VM.LoadBitmapImage] Файл не знайдено або шлях порожній: {filePath}");
+                Debug.WriteLine($"[VM.LoadBitmapImage] File not found or path is empty: {filePath}");
                 return null;
             }
 
@@ -243,7 +243,7 @@ namespace ChatApp.Client.ViewModels
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[VM.LoadBitmapImage] Помилка завантаження зображення з {filePath}: {ex.Message}");
+                Debug.WriteLine($"[VM.LoadBitmapImage] Error loading image from {filePath}: {ex.Message}");
                 return null;
             }
         }
@@ -253,11 +253,11 @@ namespace ChatApp.Client.ViewModels
             if (!IsConnected || IsFileTransferring) return;
 
             OpenFileDialog openFileDialog = new OpenFileDialog();
-            string originalFilePath = string.Empty; // Зберігаємо оригінальний шлях
+            string originalFilePath = string.Empty;
 
             if (openFileDialog.ShowDialog() == true)
             {
-                originalFilePath = openFileDialog.FileName; // Зберігаємо оригінальний шлях
+                originalFilePath = openFileDialog.FileName;
                 string fileName = Path.GetFileName(originalFilePath);
                 long fileSize;
                 try
@@ -266,14 +266,14 @@ namespace ChatApp.Client.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    AddSystemMessageToChat($"Помилка отримання інформації про файл '{fileName}': {ex.Message}");
+                    AddSystemMessageToChat($"Error getting file info for '{fileName}': {ex.Message}");
                     return;
                 }
                 string mimeType = MimeUtility.GetMimeMapping(fileName);
 
                 IsFileTransferring = true;
                 FileTransferProgress = 0;
-                AddSystemMessageToChat($"Надсилання файлу: {fileName} ({FormatFileSize(fileSize)})...");
+                AddSystemMessageToChat($"Sending file: {fileName} ({FormatFileSize(fileSize)})...");
 
                 try
                 {
@@ -295,7 +295,7 @@ namespace ChatApp.Client.ViewModels
                         Timestamp = DateTime.UtcNow
                     };
                     await _tcpClientService.SendMessageObjectAsync(metadataMessage);
-                    Debug.WriteLine($"[VM.SendFileAsync] Надіслано метадані для файлу {fileName}, ID: {fileId}, Chunks: {totalChunks}");
+                    Debug.WriteLine($"[VM.SendFileAsync] Sent metadata for file {fileName}, ID: {fileId}, Chunks: {totalChunks}");
 
                     using (FileStream fs = new FileStream(originalFilePath, FileMode.Open, FileAccess.Read))
                     {
@@ -303,7 +303,7 @@ namespace ChatApp.Client.ViewModels
                         int bytesRead;
                         for (int i = 0; i < totalChunks; i++)
                         {
-                            if (!IsConnected) { AddSystemMessageToChat("Передачу файлу скасовано: втрачено з'єднання."); break; }
+                            if (!IsConnected) { AddSystemMessageToChat("File transfer cancelled: connection lost."); break; }
 
                             bytesRead = await fs.ReadAsync(buffer, 0, chunkSize);
                             if (bytesRead == 0) break;
@@ -326,7 +326,7 @@ namespace ChatApp.Client.ViewModels
                             FileTransferProgress = ((double)(i + 1) / totalChunks) * 100;
                         }
                     }
-                    if (!IsConnected) throw new Exception("З'єднання втрачено під час передачі файлу.");
+                    if (!IsConnected) throw new Exception("Connection lost during file transfer.");
 
                     var endMessage = new ChatMessage
                     {
@@ -339,14 +339,14 @@ namespace ChatApp.Client.ViewModels
                         Timestamp = DateTime.UtcNow
                     };
                     await _tcpClientService.SendMessageObjectAsync(endMessage);
-                    Debug.WriteLine($"[VM.SendFileAsync] Надіслано FileTransferEnd для файлу {fileName}, ID: {fileId}");
+                    Debug.WriteLine($"[VM.SendFileAsync] Sent FileTransferEnd for file {fileName}, ID: {fileId}");
 
                     System.Windows.Application.Current.Dispatcher.Invoke(() =>
                     {
                         Message sentMessage = new Message
                         {
-                            Text = $"Ви надіслали файл:",
-                            FilePath = originalFilePath, // Використовуємо оригінальний повний шлях
+                            Text = $"You sent a file:",
+                            FilePath = originalFilePath,
                             Timestamp = DateTime.Now,
                             Sender = Nickname,
                             IsOwnMessage = true
@@ -363,8 +363,8 @@ namespace ChatApp.Client.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    AddSystemMessageToChat($"Помилка надсилання файлу '{fileName}': {ex.Message}");
-                    Debug.WriteLine($"[VM.SendFileAsync] Помилка: {ex}");
+                    AddSystemMessageToChat($"Error sending file '{fileName}': {ex.Message}");
+                    Debug.WriteLine($"[VM.SendFileAsync] Error: {ex}");
                 }
                 finally
                 {
@@ -388,11 +388,11 @@ namespace ChatApp.Client.ViewModels
         {
             if (receivedObject == null)
             {
-                Debug.WriteLine("[VM.OnMessageReceivedAsync] Отримано null ChatMessage. Ігнорується.");
+                Debug.WriteLine("[VM.OnMessageReceivedAsync] Received null ChatMessage. Ignoring.");
                 return;
             }
 
-            Debug.WriteLine($"[VM.OnMessageReceivedAsync] Отримано повідомлення: Тип={receivedObject.Type}, Відправник={receivedObject.Sender}, Вміст='{receivedObject.Content?.Substring(0, Math.Min(receivedObject.Content?.Length ?? 0, 50))}'");
+            Debug.WriteLine($"[VM.OnMessageReceivedAsync] Received message: Type={receivedObject.Type}, Sender={receivedObject.Sender}, Content='{receivedObject.Content?.Substring(0, Math.Min(receivedObject.Content?.Length ?? 0, 50))}'");
 
             await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
             {
@@ -401,7 +401,7 @@ namespace ChatApp.Client.ViewModels
                     case MessageType.ChatMessage:
                         if (receivedObject.Sender == Nickname)
                         {
-                            Debug.WriteLine($"[VM.OnMessageReceivedAsync] Ігнорується власне ChatMessage від {receivedObject.Sender} (можливо, відлуння).");
+                            Debug.WriteLine($"[VM.OnMessageReceivedAsync] Ignoring own ChatMessage from {receivedObject.Sender} (possibly echo).");
                         }
                         else
                         {
@@ -417,9 +417,9 @@ namespace ChatApp.Client.ViewModels
                         break;
 
                     case MessageType.SystemMessage:
-                        if (receivedObject.Content == "Нікнейм вже зайнятий, спробуйте інший!")
+                        if (receivedObject.Content == "Nickname is already taken, please try another one!")
                         {
-                            AddSystemMessageToChat($"Помилка підключення: {receivedObject.Content}");
+                            AddSystemMessageToChat($"Connection error: {receivedObject.Content}");
                             IsConnected = false;
                         }
                         else
@@ -435,7 +435,7 @@ namespace ChatApp.Client.ViewModels
                         break;
 
                     case MessageType.UserList:
-                        Debug.WriteLine("[VM.OnMessageReceivedAsync] Отримано UserList, обробляється в OnUserListReceived.");
+                        Debug.WriteLine("[VM.OnMessageReceivedAsync] Received UserList, handled by OnUserListReceived.");
                         break;
 
                     case MessageType.HistoricFileMessage:
@@ -446,7 +446,7 @@ namespace ChatApp.Client.ViewModels
 
                         Message historicMessage = new Message
                         {
-                            Text = $"{receivedObject.Sender} надіслав файл (історія):",
+                            Text = $"{receivedObject.Sender} sent a file (history):",
                             FilePath = File.Exists(historicFilePath) ? historicFilePath : historicFileName,
                             Timestamp = receivedObject.Timestamp.ToLocalTime(),
                             Sender = receivedObject.Sender,
@@ -466,7 +466,7 @@ namespace ChatApp.Client.ViewModels
                     case MessageType.FileTransferMetadata:
                         if (receivedObject.Sender != Nickname)
                         {
-                            AddSystemMessageToChat($"{receivedObject.Sender} починає надсилати файл: {receivedObject.FileName} ({FormatFileSize(receivedObject.FileSize)}).");
+                            AddSystemMessageToChat($"{receivedObject.Sender} is starting to send a file: {receivedObject.FileName} ({FormatFileSize(receivedObject.FileSize)}).");
                             _receivedFiles[receivedObject.FileId] = new FileReceptionState(
                                 receivedObject.FileName,
                                 receivedObject.FileSize,
@@ -483,12 +483,12 @@ namespace ChatApp.Client.ViewModels
                             {
                                 byte[] chunkData = Convert.FromBase64String(receivedObject.FileData);
                                 fileStateChunk.AddChunk(receivedObject.ChunkIndex, chunkData);
-                                Debug.WriteLine($"[VM.OnMessageReceivedAsync] Отримано чанк {receivedObject.ChunkIndex + 1}/{fileStateChunk.TotalChunks} для файлу {fileStateChunk.FileName}. Прогрес: {fileStateChunk.GetReceptionProgress():F1}%");
+                                Debug.WriteLine($"[VM.OnMessageReceivedAsync] Received chunk {receivedObject.ChunkIndex + 1}/{fileStateChunk.TotalChunks} for file {fileStateChunk.FileName}. Progress: {fileStateChunk.GetReceptionProgress():F1}%");
 
                             }
                             catch (Exception ex)
                             {
-                                Debug.WriteLine($"[VM.OnMessageReceivedAsync] Помилка обробки чанка для файлу {receivedObject.FileId}: {ex.Message}");
+                                Debug.WriteLine($"[VM.OnMessageReceivedAsync] Error processing chunk for file {receivedObject.FileId}: {ex.Message}");
                                 _receivedFiles.Remove(receivedObject.FileId);
                             }
                         }
@@ -511,7 +511,7 @@ namespace ChatApp.Client.ViewModels
 
                                     Message newMessage = new Message
                                     {
-                                        Text = $"{receivedObject.Sender} надіслав файл:",
+                                        Text = $"{receivedObject.Sender} sent a file:",
                                         FilePath = savePath,
                                         Timestamp = receivedObject.Timestamp.ToLocalTime(),
                                         Sender = receivedObject.Sender,
@@ -525,29 +525,29 @@ namespace ChatApp.Client.ViewModels
                                     }
 
                                     ChatMessages.Add(newMessage);
-                                    Debug.WriteLine($"[VM.OnMessageReceivedAsync] Файл {fileStateEnd.FileName} успішно отримано та збережено в {savePath}. Розмір: {assembledFile.Length} байт.");
+                                    Debug.WriteLine($"[VM.OnMessageReceivedAsync] File {fileStateEnd.FileName} successfully received and saved to {savePath}. Size: {assembledFile.Length} bytes.");
                                 }
                                 catch (Exception ex)
                                 {
-                                    AddSystemMessageToChat($"Помилка збереження файлу {fileStateEnd.FileName}: {ex.Message}");
-                                    Debug.WriteLine($"[VM.OnMessageReceivedAsync] Помилка збереження файлу {fileStateEnd.FileName}: {ex.Message}");
+                                    AddSystemMessageToChat($"Error saving file {fileStateEnd.FileName}: {ex.Message}");
+                                    Debug.WriteLine($"[VM.OnMessageReceivedAsync] Error saving file {fileStateEnd.FileName}: {ex.Message}");
                                 }
                             }
                             else
                             {
-                                AddSystemMessageToChat($"Помилка отримання файлу {fileStateEnd.FileName}: не всі частини отримано.");
-                                Debug.WriteLine($"[VM.OnMessageReceivedAsync] Файл {fileStateEnd.FileName} не завершено. Отримано {fileStateEnd.GetReceptionProgress():F1}%");
+                                AddSystemMessageToChat($"Error receiving file {fileStateEnd.FileName}: not all parts received.");
+                                Debug.WriteLine($"[VM.OnMessageReceivedAsync] File {fileStateEnd.FileName} not complete. Received {fileStateEnd.GetReceptionProgress():F1}%");
                             }
                             _receivedFiles.Remove(receivedObject.FileId);
                         }
                         else if (receivedObject.Sender == Nickname)
                         {
-                            Debug.WriteLine($"[VM.OnMessageReceivedAsync] Отримано підтвердження FileTransferEnd для мого файлу {receivedObject.FileName}.");
+                            Debug.WriteLine($"[VM.OnMessageReceivedAsync] Received FileTransferEnd confirmation for my file {receivedObject.FileName}.");
                         }
                         break;
 
                     default:
-                        Debug.WriteLine($"[VM.OnMessageReceivedAsync] Невідомий або необроблений тип повідомлення: {receivedObject.Type}");
+                        Debug.WriteLine($"[VM.OnMessageReceivedAsync] Unknown or unhandled message type: {receivedObject.Type}");
                         break;
                 }
             });
@@ -639,12 +639,12 @@ namespace ChatApp.Client.ViewModels
                         }
                         else
                         {
-                            Debug.WriteLine($"[FileReceptionState] Повторний чанк {index} для файлу {FileName}. Ігнорується.");
+                            Debug.WriteLine($"[FileReceptionState] Duplicate chunk {index} for file {FileName}. Ignoring.");
                         }
                     }
                     else
                     {
-                        Debug.WriteLine($"[FileReceptionState] Некоректний індекс чанка {index} (Total: {TotalChunks}) для файлу {FileName}.");
+                        Debug.WriteLine($"[FileReceptionState] Invalid chunk index {index} (Total: {TotalChunks}) for file {FileName}.");
                     }
                 }
             }
@@ -663,7 +663,7 @@ namespace ChatApp.Client.ViewModels
                 {
                     if (!IsComplete())
                     {
-                        Debug.WriteLine($"[FileReceptionState] Спроба зібрати неповний файл {FileName}. Отримано {_receivedChunksCount}/{TotalChunks} чанків.");
+                        Debug.WriteLine($"[FileReceptionState] Attempting to assemble incomplete file {FileName}. Received {_receivedChunksCount}/{TotalChunks} chunks.");
                         List<byte> assembledBytesOnError = new List<byte>();
                         for (int i = 0; i < TotalChunks; i++)
                         {
@@ -685,8 +685,8 @@ namespace ChatApp.Client.ViewModels
                             }
                             else
                             {
-                                Debug.WriteLine($"[FileReceptionState] КРИТИЧНО: Відсутній чанк {i} при збірці файлу {FileName}, хоча IsComplete()=true.");
-                                throw new InvalidOperationException($"Відсутній чанк {i} при збірці файлу {FileName}.");
+                                Debug.WriteLine($"[FileReceptionState] CRITICAL: Missing chunk {i} when assembling file {FileName}, though IsComplete()=true.");
+                                throw new InvalidOperationException($"Missing chunk {i} when assembling file {FileName}.");
                             }
                         }
                         return ms.ToArray();

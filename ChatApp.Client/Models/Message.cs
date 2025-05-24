@@ -1,6 +1,5 @@
-﻿// Файл: ChatApp.Client/Models/Message.cs
-using System;
-using System.IO; // Потрібно для Path.GetFileName
+﻿using System;
+using System.IO;
 using System.Windows.Media.Imaging;
 
 namespace ChatApp.Client.Models
@@ -13,7 +12,7 @@ namespace ChatApp.Client.Models
         public bool IsImage { get; set; }
 
         private string _filePath;
-        private string fileNameFromPath;
+        private string _fileNameFromPath; 
 
         public string FilePath
         {
@@ -21,12 +20,12 @@ namespace ChatApp.Client.Models
             set
             {
                 _filePath = value;
-                // Автоматично встановлюємо FileNameFromPath, якщо FilePath встановлено
+                // Automatically set FileNameFromPath when FilePath is set
                 FileNameFromPath = !string.IsNullOrEmpty(_filePath) ? Path.GetFileName(_filePath) : string.Empty;
             }
         }
-        // Ось ця властивість потрібна XAML
-        public string FileNameFromPath { get => fileNameFromPath; private set => fileNameFromPath = value; }
+        // Это свойство для XAML
+        public string FileNameFromPath { get => _fileNameFromPath; private set => _fileNameFromPath = value; }
 
         public string Sender { get; set; }
         public bool IsOwnMessage { get; set; }

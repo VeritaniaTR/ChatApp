@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 using ChatApp.Server.Networking;
-using SQLitePCL; // Додайте цей using
+using SQLitePCL; 
 
 namespace ChatApp.Server
 {
@@ -9,19 +9,16 @@ namespace ChatApp.Server
     {
         static async Task Main(string[] args)
         {
-            // !!! ВАЖЛИВО: Додайте цей рядок для ініціалізації SQLitePCL.raw !!!
             SQLitePCL.Batteries.Init();
 
-            // Отримання порту з конфігурації або за замовчуванням
             int port = GetServerPort();
 
             TcpServer server = new TcpServer(port);
 
-            Console.WriteLine("Запуск сервера...");
+            Console.WriteLine("Starting server...");
             await server.StartAsync();
 
-            // Блокування консольного застосунку до натискання клавіші
-            Console.WriteLine("Сервер працює. Натисніть будь-яку клавішу для зупинки...");
+            Console.WriteLine("Server is running. Press any key to stop...");
             Console.ReadKey();
 
             server.Stop();
@@ -29,6 +26,7 @@ namespace ChatApp.Server
 
         static int GetServerPort()
         {
+            // В реальном приложении это из конгиф файла бралось бы
             return 12345;
         }
     }

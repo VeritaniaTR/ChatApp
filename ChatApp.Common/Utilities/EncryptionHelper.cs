@@ -7,24 +7,22 @@ namespace ChatApp.Common.Utilities
 {
     public static class EncryptionHelper
     {
-        // Увага: У реальному застосунку ключ та IV НЕ ПОВИННІ бути захардкодженими!
-        // Їх потрібно генерувати безпечно та обмінювати між сторонами (наприклад, за допомогою асиметричного шифрування).
-        // Це робиться тут виключно для демонстрації в дипломній роботі.
+        // В реальном приложении ключ и IV НЕ ДОЛЖНЫ быть хардкодом!
+        // Их нужно генерировать безопасно и обмениваться между сторонами (например, с помощью асимметричного шифрования).
+        // Это делается исключительно для демонстрации в дипломной работе :)
         private static readonly byte[] Key;
         private static readonly byte[] IV;
 
-        static EncryptionHelper() // Статичний конструктор для ініціалізації Key та IV
+        static EncryptionHelper()
         {
-            // Переконайтеся, що довжина цього рядка ТОЧНО 32 символи (для AES-256)
-            string keyString = "MySuperSecretKeyForChatApp123456"; // 32 символи
+            string keyString = "MySuperSecretKeyForChatApp123456";
             if (keyString.Length != 32)
             {
                 throw new ArgumentException("Key string must be 32 characters long for AES-256.");
             }
             Key = Encoding.UTF8.GetBytes(keyString);
 
-            // Переконайтеся, що довжина цього рядка ТОЧНО 16 символів (для AES)
-            string ivString = "MyIVForAES123456"; // 16 символів
+            string ivString = "MyIVForAES123456";
             if (ivString.Length != 16)
             {
                 throw new ArgumentException("IV string must be 16 characters long for AES.");
@@ -41,8 +39,8 @@ namespace ChatApp.Common.Utilities
             {
                 aesAlg.Key = Key;
                 aesAlg.IV = IV;
-                aesAlg.Mode = CipherMode.CBC; // Режим шифрування
-                aesAlg.Padding = PaddingMode.PKCS7; // Схема доповнення
+                aesAlg.Mode = CipherMode.CBC;
+                aesAlg.Padding = PaddingMode.PKCS7;
 
                 ICryptoTransform encryptor = aesAlg.CreateEncryptor(aesAlg.Key, aesAlg.IV);
 

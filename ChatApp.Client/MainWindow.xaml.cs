@@ -3,10 +3,10 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Navigation; // Для RequestNavigateEventArgs
-using ChatApp.Client.ViewModels; // Переконайтеся, що цей простір імен правильний
+using System.Windows.Navigation;
+using ChatApp.Client.ViewModels;
 
-namespace ChatApp.Client.Views // Переконайтеся, що цей простір імен правильний
+namespace ChatApp.Client.Views
 {
     public partial class MainWindow : Window
     {
@@ -14,8 +14,8 @@ namespace ChatApp.Client.Views // Переконайтеся, що цей про
         {
             InitializeComponent();
 
-            // DataContext встановлюється в XAML через <vm:MainWindowViewModel/>
-            // Якщо виникають проблеми з цим, можна тимчасово встановити тут для діагностики:
+            // была ошибка, оствавил код если надо будет диагностика
+     
             // if (this.DataContext == null)
             // {
             //    try
@@ -24,7 +24,7 @@ namespace ChatApp.Client.Views // Переконайтеся, що цей про
             //    }
             //    catch (Exception ex)
             //    {
-            //        MessageBox.Show("Помилка створення MainWindowViewModel в MainWindow.xaml.cs: " + ex.Message);
+            //        MessageBox.Show("Error creating MainWindowViewModel in MainWindow.xaml.cs: " + ex.Message);
             //    }
             // }
 
@@ -36,15 +36,13 @@ namespace ChatApp.Client.Views // Переконайтеся, що цей про
                     {
                         if (viewModel.ChatMessages.Count > 0 && ChatScrollViewer != null)
                         {
-                            // Загортаємо в Dispatcher на випадок, якщо CollectionChanged викликається з фонового потоку
                             ChatScrollViewer.Dispatcher.InvokeAsync(() => ChatScrollViewer.ScrollToBottom());
                         }
                     };
                 }
                 else
                 {
-                    // Це може статися, якщо DataContext не встановлено або має неправильний тип
-                    Debug.WriteLine("[MainWindow.Loaded] DataContext не є MainWindowViewModel або null.");
+                    Debug.WriteLine("[MainWindow.Loaded] DataContext is not MainWindowViewModel or is null.");
                 }
             };
 
@@ -65,12 +63,11 @@ namespace ChatApp.Client.Views // Переконайтеся, що цей про
             };
         }
 
-        // Обробник для надсилання повідомлення по натисканню Enter в TextBox
         private void MessageTextBox_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
             {
-                if (this.DataContext is MainWindowViewModel viewModel) // this.DataContext, а не DataContext
+                if (this.DataContext is MainWindowViewModel viewModel)
                 {
                     if (viewModel.SendCommand.CanExecute(null))
                     {
@@ -80,7 +77,6 @@ namespace ChatApp.Client.Views // Переконайтеся, що цей про
             }
         }
 
-        // Обробник для Hyperlink, щоб відкрити файл або папку
         private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
         {
             if (e.Uri == null || string.IsNullOrWhiteSpace(e.Uri.OriginalString))
@@ -103,15 +99,12 @@ namespace ChatApp.Client.Views // Переконайтеся, що цей про
                 }
                 else
                 {
-                    Debug.WriteLine($"[Hyperlink_RequestNavigate] Не вдалося відкрити: '{filePath}'. Файл або папка не існує.");
-                    // Можна показати MessageBox, якщо потрібно
-                    // MessageBox.Show($"Не вдалося відкрити: {filePath}\nФайл або папка не існує.", "Помилка відкриття", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    Debug.WriteLine($"[Hyperlink_RequestNavigate] Failed to open: '{filePath}'. File or directory does not exist.");
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[Hyperlink_RequestNavigate] Помилка при спробі відкрити '{e.Uri?.OriginalString}': {ex.Message}");
-                // MessageBox.Show($"Помилка при спробі відкрити файл: {ex.Message}", "Помилка", MessageBoxButton.OK, MessageBoxImage.Error);
+                Debug.WriteLine($"[Hyperlink_RequestNavigate] Error trying to open '{e.Uri?.OriginalString}': {ex.Message}");
             }
             e.Handled = true;
         }

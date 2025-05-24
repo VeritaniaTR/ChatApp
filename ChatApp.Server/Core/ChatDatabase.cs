@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using ChatApp.Common.Models;
 using Microsoft.Data.Sqlite;
-using System.IO; // Для Path
+using System.IO;
 
 namespace ChatApp.Server.Core
 {
@@ -12,10 +12,9 @@ namespace ChatApp.Server.Core
 
         public ChatDatabase(string dbFileName = "chat_history.db")
         {
-            // Переконаємося, що база даних зберігається в папці програми
             string baseDirectory = AppContext.BaseDirectory;
             _connectionString = $"Data Source={Path.Combine(baseDirectory, dbFileName)}";
-            Console.WriteLine($"Шлях до БД: {_connectionString}");
+            Console.WriteLine($"Database path: {_connectionString}");
             InitializeDatabase();
         }
 
@@ -25,65 +24,60 @@ namespace ChatApp.Server.Core
             {
                 connection.Open();
                 var command = connection.CreateCommand();
-                // Оновлена схема таблиці
                 command.CommandText = @"
                     CREATE TABLE IF NOT EXISTS Messages (
                         Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        Timestamp TEXT NOT NULL,          -- Зберігаємо як ISO 8601 DateTimeOffset рядок
+                        Timestamp TEXT NOT NULL,          
                         Sender TEXT NOT NULL,
-                        Content TEXT,                     -- Може бути NULL для файлових повідомлень
-                        MessageType INTEGER NOT NULL,     -- Тип повідомлення з enum MessageType
-                        Recipient TEXT,                   -- Для приватних повідомлень
+                        Content TEXT,                     
+                        MessageType INTEGER NOT NULL,     
+                        Recipient TEXT,                   
                         
-                        -- Поля для файлів
-                        FileId TEXT,                      -- Guid як текст
+                        FileId TEXT,                      
                         FileName TEXT,
-                        FileSize INTEGER,                 -- long
+                        FileSize INTEGER,                 
                         FileMimeType TEXT
                     );";
                 command.ExecuteNonQuery();
 
-                // Перевірка та додавання колонок, якщо їх немає (проста міграція)
-                // Це потрібно, якщо база даних вже існує зі старою схемою
+                // Проверка для простой миграции
+                // это если база есть со старой схемой
                 AddFieldIfNotExists(connection, "Messages", "Recipient", "TEXT");
                 AddFieldIfNotExists(connection, "Messages", "FileId", "TEXT");
                 AddFieldIfNotExists(connection, "Messages", "FileName", "TEXT");
                 AddFieldIfNotExists(connection, "Messages", "FileSize", "INTEGER");
                 AddFieldIfNotExists(connection, "Messages", "FileMimeType", "TEXT");
-                // Переконуємося, що MessageType має значення за замовчуванням, якщо раніше його не було
-                // Ця логіка може бути складнішою для існуючих даних, але для нових колонок це не так критично
             }
         }
 
-        // Допоміжний метод для додавання колонки, якщо вона не існує
         private void AddFieldIfNotExists(SqliteConnection connection, string tableName, string columnName, string columnType)
         {
             try
             {
                 var command = connection.CreateCommand();
+                // A more robust way to check if a column exists is PRAGMA table_info(tableName)
+                // This is a simplified check.
                 command.CommandText = $"SELECT {columnName} FROM {tableName} LIMIT 1;";
-                command.ExecuteNonQuery(); // Якщо колонка існує, це не викличе помилку (або викличе, якщо таблиця порожня)
-                                           // Краще перевіряти через PRAGMA table_info(tableName)
+                command.ExecuteScalar(); // Using ExecuteScalar which might be better for a single value check or existence.
             }
-            catch (SqliteException ex) when (ex.SqliteErrorCode == 1) // SQLITE_ERROR (no such column)
+            catch (SqliteException ex) when (ex.SqliteErrorCode == 1 && ex.Message.ToLower().Contains($"no such column: {columnName.ToLower()}"))
             {
                 var alterCmd = connection.CreateCommand();
                 alterCmd.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnType};";
                 try
                 {
                     alterCmd.ExecuteNonQuery();
-                    Console.WriteLine($"Колонку '{columnName}' додано до таблиці '{tableName}'.");
+                    Console.WriteLine($"Column '{columnName}' added to table '{tableName}'.");
                 }
                 catch (Exception alterEx)
                 {
-                    Console.WriteLine($"Помилка додавання колонки '{columnName}': {alterEx.Message}");
+                    Console.WriteLine($"Error adding column '{columnName}': {alterEx.Message}");
                 }
             }
-            catch (Exception) { /* Колонка, ймовірно, існує, або інша помилка */ }
+            catch (Exception) { /* Column likely exists, or other error */ }
         }
 
 
-        // Оновлений метод збереження
         public void SaveMessage(ChatMessage message)
         {
             using (var connection = new SqliteConnection(_connectionString))
@@ -94,9 +88,9 @@ namespace ChatApp.Server.Core
                     INSERT INTO Messages (Timestamp, Sender, Content, MessageType, Recipient, FileId, FileName, FileSize, FileMimeType) 
                     VALUES ($timestamp, $sender, $content, $messageType, $recipient, $fileId, $fileName, $fileSize, $fileMimeType)";
 
-                command.Parameters.AddWithValue("$timestamp", new DateTimeOffset(message.Timestamp.ToUniversalTime()).ToString("o")); // Зберігаємо в UTC ISO 8601
+                command.Parameters.AddWithValue("$timestamp", new DateTimeOffset(message.Timestamp.ToUniversalTime()).ToString("o"));
                 command.Parameters.AddWithValue("$sender", message.Sender);
-                command.Parameters.AddWithValue("$content", (object)message.Content ?? DBNull.Value); // Дозволяємо NULL
+                command.Parameters.AddWithValue("$content", (object)message.Content ?? DBNull.Value);
                 command.Parameters.AddWithValue("$messageType", (int)message.Type);
                 command.Parameters.AddWithValue("$recipient", (object)message.Recipient ?? DBNull.Value);
 

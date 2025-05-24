@@ -5,20 +5,19 @@ namespace ChatApp.Common.Models
 {
     public enum MessageType
     {
-        ChatMessage,        // Звичайне текстове повідомлення
-        SystemMessage,      // Системне повідомлення від сервера або клієнта
-        UserList,           // Список користувачів онлайн
-        Disconnect,         // Повідомлення про відключення
-        PrivateMessage,     // Приватне повідомлення (поки не реалізовано)
+        ChatMessage,
+        SystemMessage,
+        UserList,
+        Disconnect,
+        PrivateMessage,
 
-        FileTransferMetadata, // Метадані файлу (початок "живої" передачі)
-        FileTransferChunk,    // Фрагмент файлу ("жива" передача)
-        FileTransferEnd,      // Кінець "живої" передачі файлу
+        FileTransferMetadata,
+        FileTransferChunk,
+        FileTransferEnd,
 
-        HistoricFileMessage, // НОВИЙ ТИП: Повідомлення в історії, що представляє файл
+        HistoricFileMessage, // представляет файл(не забыть)
 
-        TypingStatus        // Статус набору тексту (поки не реалізовано)
-        // FileTransfer був зайвим, видаляємо, якщо не використовується для чогось специфічного
+        TypingStatus
     }
 
     public class ChatMessage
@@ -33,14 +32,13 @@ namespace ChatApp.Common.Models
         public string Recipient { get; set; }
 
         [JsonProperty("content")]
-        public string Content { get; set; } // Для ChatMessage, SystemMessage. Для HistoricFileMessage може бути порожнім або містити опис.
+        public string Content { get; set; }
 
         [JsonProperty("timestamp")]
         public DateTime Timestamp { get; set; }
 
-        // Поля для передачі файлів та для HistoricFileMessage
         [JsonProperty("fileId")]
-        public Guid FileId { get; set; } // Може бути корисним для HistoricFileMessage для ідентифікації
+        public Guid FileId { get; set; }
 
         [JsonProperty("fileName")]
         public string FileName { get; set; }
@@ -51,19 +49,18 @@ namespace ChatApp.Common.Models
         [JsonProperty("fileMimeType")]
         public string FileMimeType { get; set; }
 
-        // Ці поля більше для "живої" передачі, але можуть бути у HistoricFileMessage, якщо потрібно
         [JsonProperty("chunkIndex")]
         public int ChunkIndex { get; set; }
 
         [JsonProperty("totalChunks")]
         public int TotalChunks { get; set; }
 
-        [JsonProperty("fileData")] // Для "живої" передачі, для HistoricFileMessage буде null
+        [JsonProperty("fileData")]
         public string FileData { get; set; }
 
         public ChatMessage()
         {
-            Timestamp = DateTime.UtcNow; // Встановлюємо UTC час за замовчуванням
+            Timestamp = DateTime.UtcNow;
             FileId = Guid.Empty;
         }
 
@@ -80,8 +77,7 @@ namespace ChatApp.Common.Models
             }
             catch (Exception ex)
             {
-                // Можна додати логування помилки десеріалізації тут
-                System.Diagnostics.Debug.WriteLine($"Помилка десеріалізації ChatMessage: {ex.Message} | JSON: {json}");
+                System.Diagnostics.Debug.WriteLine($"Error deserializing ChatMessage: {ex.Message} | JSON: {json}");
                 return null;
             }
         }
